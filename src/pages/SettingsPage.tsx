@@ -78,6 +78,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 interface CacheItem {
   cacheName: string;
@@ -137,6 +138,39 @@ function getBalanceTransactionTypeLabel(type: string) {
     MANUAL_CORRECTION: "人工修正",
   };
   return labels[type] || type || "其他";
+}
+
+function getBalanceTransactionSignedAmount(item: BalanceTransaction) {
+  const rawAmount = Number(item.amount || 0);
+  const balanceDelta =
+    Number(item.balance_after || 0) - Number(item.balance_before || 0);
+  const normalizedType = String(item.type || "").toUpperCase();
+  const isDebit = ["CONSUME", "DEDUCT", "CHARGE"].includes(normalizedType);
+  const isCredit = ["RECHARGE", "REFUND"].includes(normalizedType);
+
+  if (isDebit) {
+    const debitAmount = rawAmount === 0 ? Math.abs(balanceDelta) : rawAmount;
+    return -Math.abs(debitAmount);
+  }
+  if (isCredit) {
+    const creditAmount = rawAmount === 0 ? Math.abs(balanceDelta) : rawAmount;
+    return Math.abs(creditAmount);
+  }
+  if (rawAmount !== 0) return rawAmount;
+  return balanceDelta;
+}
+
+function formatCnyAmount(value: number, precision = 4) {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}¥${Math.abs(value).toFixed(precision)}`;
+}
+
+function getBalanceTransactionDescription(item: BalanceTransaction) {
+  const description = String(item.description || "").trim();
+  if (description) return description;
+  const referenceId = String(item.reference_id || "").trim();
+  if (referenceId) return referenceId;
+  return "余额变动";
 }
 
 export function SettingsPage() {
@@ -1657,10 +1691,11 @@ export function SettingsPage() {
         open={showBalanceTransactions}
         onOpenChange={setShowBalanceTransactions}
       >
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-3xl max-h-[78vh] flex flex-col gap-0 overflow-hidden p-0">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>
+            <DialogTitle className="flex items-center justify-between border-b px-6 py-4">
+              <span className="flex items-center gap-2 text-lg">
+                <ReceiptText className="h-4 w-4 text-muted-foreground" />
                 {t("settings.balance.transactions", "Balance Details")}
               </span>
               <span className="text-sm font-normal text-muted-foreground">
@@ -1671,7 +1706,7 @@ export function SettingsPage() {
               </span>
             </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-auto -mx-6 px-6">
+          <div className="flex-1 overflow-auto px-6 py-2">
             {isLoadingBalanceTransactions ? (
               <div className="flex items-center justify-center py-12 text-muted-foreground">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1682,74 +1717,62 @@ export function SettingsPage() {
                 {t("settings.balance.noTransactions", "No balance records")}
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-xs text-muted-foreground">
-                    <tr className="border-b">
-                      <th className="py-2 pr-4 text-left font-medium">
-                        {t("settings.balance.time", "Time")}
-                      </th>
-                      <th className="py-2 pr-4 text-left font-medium">
-                        {t("settings.balance.type", "Type")}
-                      </th>
-                      <th className="py-2 pr-4 text-right font-medium">
-                        {t("settings.balance.amount", "Amount")}
-                      </th>
-                      <th className="py-2 pr-4 text-right font-medium">
-                        {t("settings.balance.balanceAfter", "Balance")}
-                      </th>
-                      <th className="py-2 pr-4 text-left font-medium">
-                        {t("settings.balance.model", "Model")}
-                      </th>
-                      <th className="py-2 text-left font-medium">
-                        {t("settings.balance.descriptionLabel", "Description")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {balanceTransactions.map((item) => (
-                      <tr key={item.id} className="border-b last:border-0">
-                        <td className="py-3 pr-4 whitespace-nowrap text-muted-foreground">
-                          {formatDateTime(item.created_at)}
-                        </td>
-                        <td className="py-3 pr-4 whitespace-nowrap">
-                          {getBalanceTransactionTypeLabel(item.type)}
-                        </td>
-                        <td
-                          className={`py-3 pr-4 text-right font-medium ${
-                            item.amount >= 0
-                              ? "text-emerald-500"
-                              : "text-foreground"
-                          }`}
+              <div className="divide-y">
+                {balanceTransactions.map((item) => {
+                  const signedAmount = getBalanceTransactionSignedAmount(item);
+                  const isDebit = signedAmount < 0;
+                  const typeLabel = getBalanceTransactionTypeLabel(item.type);
+                  const description = getBalanceTransactionDescription(item);
+                  return (
+                    <div
+                      key={item.id}
+                      className="grid gap-4 py-4 md:grid-cols-[minmax(0,1fr)_150px] md:items-center"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="shrink-0 font-medium text-foreground">
+                            {typeLabel}
+                          </span>
+                          {item.model_id ? (
+                            <span
+                              className="min-w-0 truncate text-sm text-muted-foreground"
+                              title={item.model_id}
+                            >
+                              {item.model_id}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div
+                          className="mt-1 truncate text-sm text-muted-foreground"
+                          title={description}
                         >
-                          {item.amount >= 0 ? "+" : "-"}¥
-                          {Math.abs(item.amount).toFixed(4)}
-                        </td>
-                        <td className="py-3 pr-4 text-right whitespace-nowrap">
-                          ¥{item.balance_after.toFixed(4)}
-                        </td>
-                        <td
-                          className="py-3 pr-4 max-w-[180px] truncate text-muted-foreground"
-                          title={item.model_id || undefined}
+                          {description}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span>{formatDateTime(item.created_at)}</span>
+                          <span>
+                            {t("settings.balance.balanceAfter", "Balance")} ¥
+                            {item.balance_after.toFixed(4)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-left md:text-right">
+                        <div
+                          className={cn(
+                            "text-base font-semibold tabular-nums",
+                            isDebit ? "text-red-400" : "text-emerald-400",
+                          )}
                         >
-                          {item.model_id || "-"}
-                        </td>
-                        <td
-                          className="py-3 max-w-[240px] truncate text-muted-foreground"
-                          title={
-                            item.description || item.reference_id || undefined
-                          }
-                        >
-                          {item.description || item.reference_id || "-"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          {formatCnyAmount(signedAmount)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between border-t pt-4 text-sm">
+          <div className="flex items-center justify-between border-t bg-muted/20 px-6 py-4 text-sm">
             <span className="text-muted-foreground">
               {t("settings.balance.transactionPage", {
                 page: balanceTransactionsPage,

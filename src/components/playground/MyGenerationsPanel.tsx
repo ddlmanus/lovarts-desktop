@@ -15,6 +15,7 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
 type GenerationCard = {
@@ -27,6 +28,7 @@ type GenerationCard = {
   thumbnailType: "image" | "video" | null;
   error?: string | null;
   source: "local" | "remote";
+  predictionId?: string | null;
 };
 
 type GenerationPreview = {
@@ -42,6 +44,7 @@ interface MyGenerationsPanelProps {
   isLoading?: boolean;
   onRefresh?: () => void;
   onShowExamples?: () => void;
+  onDelete?: (item: GenerationCard) => void | Promise<void>;
 }
 
 function extractUrl(output: unknown): string | null {
@@ -88,6 +91,7 @@ function toLocalCard(item: GenerationHistoryItem): GenerationCard {
     thumbnailType: item.thumbnailType || media?.type || null,
     error: item.error || item.prediction.error || null,
     source: "local",
+    predictionId: item.prediction.id || null,
   };
 }
 
@@ -103,15 +107,20 @@ function toRemoteCard(item: HistoryItem): GenerationCard {
     thumbnailUrl: media?.url || null,
     thumbnailType: media?.type || null,
     source: "remote",
+    predictionId: item.id,
   };
 }
 
 function GenerationCardView({
   item,
   onPreview,
+  onDelete,
+  isDeleting,
 }: {
   item: GenerationCard;
   onPreview: (preview: GenerationPreview) => void;
+  onDelete?: (item: GenerationCard) => void | Promise<void>;
+  isDeleting?: boolean;
 }) {
   const isRunning =
     item.status === "created" ||
@@ -222,8 +231,9 @@ function GenerationCardView({
             {item.source === "local" ? "当前会话" : "历史记录"}
           </p>
         </div>
-        {firstUrl && !isRunning && !isFailed && (
-          <div className="flex shrink-0 items-center gap-1 opacity-80 transition-opacity group-hover:opacity-100">
+        <div className="flex shrink-0 items-center gap-1 opacity-80 transition-opacity group-hover:opacity-100">
+          {firstUrl && !isRunning && !isFailed && (
+            <>
             <a
               href={firstUrl}
               download
@@ -244,8 +254,27 @@ function GenerationCardView({
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </button>
-          </div>
-        )}
+            </>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                void onDelete(item);
+              }}
+              disabled={isDeleting}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#9ca3af] hover:bg-red-500/15 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+              title="删除"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -257,8 +286,10 @@ export function MyGenerationsPanel({
   isLoading,
   onRefresh,
   onShowExamples,
+  onDelete,
 }: MyGenerationsPanelProps) {
   const [preview, setPreview] = useState<GenerationPreview | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const localCards = localHistory.map(toLocalCard);
   const localIds = new Set(localCards.map((item) => item.id));
   const remoteCards = remoteHistory
@@ -267,6 +298,20 @@ export function MyGenerationsPanel({
   const cards = [...localCards, ...remoteCards].sort(
     (a, b) => b.createdAt - a.createdAt,
   );
+
+  const handleDelete = async (item: GenerationCard) => {
+    if (!onDelete || deletingId) return;
+    const key = `${item.source}-${item.id}`;
+    setDeletingId(key);
+    try {
+      await onDelete(item);
+      if (preview?.url && item.outputs.some((output) => extractUrl(output) === preview.url)) {
+        setPreview(null);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <>
@@ -320,6 +365,8 @@ export function MyGenerationsPanel({
                   key={`${item.source}-${item.id}`}
                   item={item}
                   onPreview={setPreview}
+                  onDelete={onDelete ? handleDelete : undefined}
+                  isDeleting={deletingId === `${item.source}-${item.id}`}
                 />
               ))}
             </div>

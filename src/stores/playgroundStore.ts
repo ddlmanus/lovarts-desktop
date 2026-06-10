@@ -375,6 +375,7 @@ interface PlaygroundState {
 
   // History selection
   selectHistoryItem: (index: number | null) => void;
+  removeGenerationHistoryItem: (id: string) => void;
 
   // Consume pending form values (returns them and clears from tab)
   consumePendingFormValues: () => Record<string, unknown> | null;
@@ -1498,6 +1499,35 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         ),
       };
     });
+  },
+
+  removeGenerationHistoryItem: (id: string) => {
+    set((state) => ({
+      tabs: state.tabs.map((tab) => {
+        if (tab.id !== state.activeTabId) return tab;
+        const removedIndex = tab.generationHistory.findIndex(
+          (item) => item.id === id,
+        );
+        if (removedIndex === -1) return tab;
+
+        let selectedHistoryIndex = tab.selectedHistoryIndex;
+        if (selectedHistoryIndex !== null) {
+          if (selectedHistoryIndex === removedIndex) {
+            selectedHistoryIndex = null;
+          } else if (selectedHistoryIndex > removedIndex) {
+            selectedHistoryIndex -= 1;
+          }
+        }
+
+        return {
+          ...tab,
+          generationHistory: tab.generationHistory.filter(
+            (item) => item.id !== id,
+          ),
+          selectedHistoryIndex,
+        };
+      }),
+    }));
   },
 
   consumePendingFormValues: () => {

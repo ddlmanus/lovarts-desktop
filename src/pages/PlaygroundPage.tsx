@@ -207,6 +207,7 @@ export function PlaygroundPage({
     reorderTab,
     consumePendingFormValues,
     validateForm,
+    removeGenerationHistoryItem,
   } = usePlaygroundStore();
   const { templates, loadTemplates, createTemplate, migrateFromLocalStorage } =
     useTemplateStore();
@@ -959,6 +960,30 @@ export function PlaygroundPage({
     fetchMyGenerations,
   ]);
 
+  const handleDeleteGeneration = useCallback(
+    async (item: { id: string; source: "local" | "remote" }) => {
+      try {
+        if (item.source === "remote") {
+          await apiClient.deletePrediction(item.id);
+          setRemoteGenerationHistory((items) =>
+            items.filter((historyItem) => historyItem.id !== item.id),
+          );
+        } else {
+          removeGenerationHistoryItem(item.id);
+        }
+        toast({ title: "记录已删除" });
+      } catch (error) {
+        toast({
+          title: "删除失败",
+          description:
+            error instanceof Error ? error.message : "删除记录失败，请稍后重试。",
+          variant: "destructive",
+        });
+      }
+    },
+    [removeGenerationHistoryItem],
+  );
+
   // Ctrl+Enter / Cmd+Enter to run; Ctrl+W / Cmd+W to close active tab
   useEffect(() => {
     if (!isActive) return;
@@ -1545,6 +1570,7 @@ export function PlaygroundPage({
                   isLoading={isRemoteHistoryLoading}
                   onRefresh={fetchMyGenerations}
                   onShowExamples={() => switchTab("featured")}
+                  onDelete={handleDeleteGeneration}
                 />
               </div>
             </div>
