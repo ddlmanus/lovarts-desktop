@@ -1,16 +1,16 @@
-# WaveSpeed
+# Lovarts.AI
 
 Open-source, cross-platform application for running 1000+ AI models — image generation, video generation, face swap, digital human, motion control, and more. Features a visual workflow editor for building AI pipelines, Featured Models with smart variant switching, and 12 free creative tools. Available for **Windows**, **macOS**, **Linux**, and **Android**.
 
-[![GitHub Release](https://img.shields.io/github/v/release/WaveSpeedAI/wavespeed-desktop?style=flat-square&label=Latest)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest)
-[![License](https://img.shields.io/github/license/WaveSpeedAI/wavespeed-desktop?style=flat-square)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/WaveSpeedAI/wavespeed-desktop?style=flat-square)](https://github.com/WaveSpeedAI/wavespeed-desktop/stargazers)
+[![GitHub Release](https://img.shields.io/github/v/release/Lovarts.AIAI/Lovarts.AI-desktop?style=flat-square&label=Latest)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest)
+[![License](https://img.shields.io/github/license/Lovarts.AIAI/Lovarts.AI-desktop?style=flat-square)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Lovarts.AIAI/Lovarts.AI-desktop?style=flat-square)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/stargazers)
 
-[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDMuNWw5LjktMS40djkuNUgwem0xMS4xLTEuNUwyNCAwdjExLjVIMTEuMXpNMCAxMi42aDkuOXY5LjVMMCAyMC43em0xMS4xLS4xSDI0VjI0bC0xMi45LTEuOHoiLz48L3N2Zz4=&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-win-x64.exe)
-[![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-mac-x64.dmg)
-[![macOS Apple Silicon](https://img.shields.io/badge/macOS_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-mac-arm64.dmg)
-[![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-linux-x86_64.AppImage)
-[![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Mobile.apk)
+[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDMuNWw5LjktMS40djkuNUgwem0xMS4xLTEuNUwyNCAwdjExLjVIMTEuMXpNMCAxMi42aDkuOXY5LjVMMCAyMC43em0xMS4xLS4xSDI0VjI0bC0xMi45LTEuOHoiLz48L3N2Zz4=&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-win-x64.exe)
+[![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-mac-x64.dmg)
+[![macOS Apple Silicon](https://img.shields.io/badge/macOS_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-mac-arm64.dmg)
+[![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-linux-x86_64.AppImage)
+[![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Mobile.apk)
 
 ![Playground Screenshot](https://github.com/user-attachments/assets/054a45d8-9bbc-4f1b-8cc1-b6fa4b3b2aac)
 
@@ -26,13 +26,13 @@ The Android app shares the same React codebase as the desktop version, giving yo
 - 18 languages, dark/light theme, Android 5.0+
 
 <p>
-  <img src="https://github.com/user-attachments/assets/dafa6699-35ed-4da2-b6eb-4da818e2c846" alt="WaveSpeed Android - Free Tools" width="300" />
-  <img src="https://github.com/user-attachments/assets/d392a9d0-2a44-480b-9195-d23a850a1946" alt="WaveSpeed Android - Playground" width="300" />
+  <img src="https://github.com/user-attachments/assets/dafa6699-35ed-4da2-b6eb-4da818e2c846" alt="Lovarts.AI Android - Free Tools" width="300" />
+  <img src="https://github.com/user-attachments/assets/d392a9d0-2a44-480b-9195-d23a850a1946" alt="Lovarts.AI Android - Playground" width="300" />
 </p>
 
-## [Creative Studio](https://wavespeed.ai/studio)
+## [Creative Studio](https://Lovarts.AI.ai/studio)
 
-12 free AI-powered creative tools that run entirely in your browser. No API key required, no usage limits, completely free. Also available as a standalone web app at [wavespeed.ai/studio](https://wavespeed.ai/studio) — fully responsive, works on desktop, tablet, and mobile browsers.
+12 free AI-powered creative tools that run entirely in your browser. No API key required, no usage limits, completely free. Also available as a standalone web app at [Lovarts.AI.ai/studio](https://Lovarts.AI.ai/studio) — fully responsive, works on desktop, tablet, and mobile browsers.
 
 | Tool                   | Description                                                                                       |
 | ---------------------- | ------------------------------------------------------------------------------------------------- |
@@ -49,13 +49,13 @@ The Android app shares the same React codebase as the desktop version, giving yo
 | **Media Trimmer**      | Trim video and audio by selecting start and end times                                             |
 | **Media Merger**       | Merge multiple video or audio files into one                                                      |
 
-![WaveSpeed Creative Studio](https://github.com/user-attachments/assets/dea6a526-ec08-408a-810d-7f88cc28797a)
+![Lovarts.AI Creative Studio](https://github.com/user-attachments/assets/dea6a526-ec08-408a-810d-7f88cc28797a)
 
 ## Visual Workflow Editor
 
 Node-based pipeline builder for designing and executing complex AI workflows. Chain any combination of AI models, free tools, and media processing steps into automated pipelines.
 
-![WaveSpeed Visual Workflow Editor](https://github.com/user-attachments/assets/31f6889a-aeff-41a9-ab15-c16f7c828712)
+![Lovarts.AI Visual Workflow Editor](https://github.com/user-attachments/assets/31f6889a-aeff-41a9-ab15-c16f7c828712)
 
 ## Features
 
@@ -84,16 +84,16 @@ Node-based pipeline builder for designing and executing complex AI workflows. Ch
 
 #### Desktop
 
-[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDMuNWw5LjktMS40djkuNUgwem0xMS4xLTEuNUwyNCAwdjExLjVIMTEuMXpNMCAxMi42aDkuOXY5LjVMMCAyMC43em0xMS4xLS4xSDI0VjI0bC0xMi45LTEuOHoiLz48L3N2Zz4=&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-win-x64.exe)
-[![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-mac-x64.dmg)
-[![macOS Apple Silicon](https://img.shields.io/badge/macOS_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-mac-arm64.dmg)
-[![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-linux-x86_64.AppImage)
+[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDMuNWw5LjktMS40djkuNUgwem0xMS4xLTEuNUwyNCAwdjExLjVIMTEuMXpNMCAxMi42aDkuOXY5LjVMMCAyMC43em0xMS4xLS4xSDI0VjI0bC0xMi45LTEuOHoiLz48L3N2Zz4=&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-win-x64.exe)
+[![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-mac-x64.dmg)
+[![macOS Apple Silicon](https://img.shields.io/badge/macOS_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-mac-arm64.dmg)
+[![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-linux-x86_64.AppImage)
 
 #### Mobile
 
-[![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Mobile.apk)
+[![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Mobile.apk)
 
-Or browse all releases on the [Releases](https://github.com/WaveSpeedAI/wavespeed-desktop/releases) page.
+Or browse all releases on the [Releases](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases) page.
 
 ### Platform Instructions
 
@@ -133,7 +133,7 @@ Or browse all releases on the [Releases](https://github.com/WaveSpeedAI/wavespee
 
 ### Nightly Builds
 
-[![Nightly](https://img.shields.io/badge/Nightly-FF6B6B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/tag/nightly)
+[![Nightly](https://img.shields.io/badge/Nightly-FF6B6B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/tag/nightly)
 
 > **Note:** Nightly builds may be unstable. Use the stable releases for production use.
 
@@ -148,8 +148,8 @@ Or browse all releases on the [Releases](https://github.com/WaveSpeedAI/wavespee
 
 ```bash
 # Clone the repository
-git clone https://github.com/WaveSpeedAI/wavespeed-desktop.git
-cd wavespeed-desktop
+git clone https://github.com/Lovarts.AIAI/Lovarts.AI-desktop.git
+cd Lovarts.AI-desktop
 
 # Install dependencies
 npm install
@@ -203,7 +203,7 @@ See [mobile/README.md](mobile/README.md) for detailed mobile development guide.
 ### Project Structure
 
 ```
-wavespeed-desktop/
+Lovarts.AI-desktop/
 ├── data/templates/         # Preset workflow templates (AI generation, image/video/audio processing)
 ├── electron/               # Electron main process
 │   ├── main.ts             # Main process entry
@@ -275,14 +275,14 @@ wavespeed-desktop/
 
 1. Launch the application
 2. Go to **Settings**
-3. Enter your WaveSpeedAI API key
+3. Enter your Lovarts.AIAI API key
 4. Start using the Playground!
 
-Get your API key from [WaveSpeedAI](https://wavespeed.ai)
+Get your API key from [Lovarts.AIAI](https://Lovarts.AI.ai)
 
 ## API Reference
 
-The application uses the WaveSpeedAI API v3:
+The application uses the Lovarts.AIAI API v3:
 
 | Endpoint                          | Method | Description            |
 | --------------------------------- | ------ | ---------------------- |
@@ -321,6 +321,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [WaveSpeed Website](https://wavespeed.ai)
-- [API Documentation](https://wavespeed.ai/docs)
-- [GitHub Repository](https://github.com/WaveSpeedAI/wavespeed-desktop)
+- [Lovarts.AI Website](https://Lovarts.AI.ai)
+- [API Documentation](https://Lovarts.AI.ai/docs)
+- [GitHub Repository](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop)

@@ -4,9 +4,9 @@ This file provides guidance for Claude Code when working with this repository.
 
 ## Project Overview
 
-Lovart.AI is an Electron-based cross-platform desktop application that provides a playground interface for [WaveSpeedAI](https://wavespeed.ai) models. It allows users to browse models, run predictions, view their history, and manage saved assets.
+Lovart.AI is an Electron-based cross-platform desktop application that provides a playground interface for [Lovarts.AI](https://lovarts.art) models. It allows users to browse models, run predictions, view their history, and manage saved assets.
 
-**Workflow** is a node-based visual editor (under `src/workflow/`) for chaining WaveSpeed AI Task nodes, free-tool nodes, and I/O nodes. Workflows are persisted via the Electron main process (sql.js DB), with execution and per-node history. Workflows can run in Electron (main process) or in the browser (in-process executor using apiClient + free-tool runners when workflow IPC is unavailable). Cost is informational only (no estimate UI or budget blocking).
+**Workflow** is a node-based visual editor (under `src/workflow/`) for chaining Lovarts.AI AI Task nodes, free-tool nodes, and I/O nodes. Workflows are persisted via the Electron main process (sql.js DB), with execution and per-node history. Workflows can run in Electron (main process) or in the browser (in-process executor using apiClient + free-tool runners when workflow IPC is unavailable). Cost is informational only (no estimate UI or budget blocking).
 
 **Z-Image** is the local image generation flow backed by stable-diffusion.cpp with model and auxiliary downloads, progress reporting, and log streaming.
 
@@ -21,14 +21,14 @@ Lovart.AI is an Electron-based cross-platform desktop application that provides 
 ## Project Structure
 
 ```
-wavespeed-desktop/
+Lovarts.AI-desktop/
 ├── electron/              # Electron main process files
 │   ├── main.ts           # Main process entry point
 │   ├── preload.ts        # Preload script for IPC bridge
 │   └── workflow/         # Workflow module (sql.js DB, node registry, IPC handlers)
 ├── src/
 │   ├── api/
-│   │   └── client.ts     # WaveSpeedAI API client (base URL, auth, methods)
+│   │   └── client.ts     # Lovarts.AI API client (base URL, auth, methods)
 │   ├── components/
 │   │   ├── layout/       # Sidebar, Layout components
 │   │   ├── playground/   # DynamicForm, FileUpload, OutputDisplay, MaskEditor, etc.
@@ -59,7 +59,7 @@ wavespeed-desktop/
 
 ## Key Files
 
-- **`src/api/client.ts`**: API client with all WaveSpeedAI endpoints
+- **`src/api/client.ts`**: API client with all Lovarts.AI endpoints
 - **`src/stores/apiKeyStore.ts`**: API key persistence and validation (electron-store + localStorage fallback)
 - **`src/stores/modelsStore.ts`**: Model list caching, filtering, and sorting (supports sort_order/popularity)
 - **`src/stores/playgroundStore.ts`**: Multi-tab playground state management
@@ -85,7 +85,7 @@ wavespeed-desktop/
 - **`src/workflow/lib/topological.ts`**: Topological sort for workflow execution order
 - **`src/workflow/browser/run-in-browser.ts`**: Workflow execution (browser only): AI task via apiClient, free-tool nodes, I/O nodes
 - **`src/workflow/ipc/ipc-client.ts`**: Typed IPC client for workflow, execution, models, cost, history, registry, settings
-- **`src/workflow/types/node-defs.ts`**: NodeTypeDefinition, WaveSpeedModel, ParamDefinition
+- **`src/workflow/types/node-defs.ts`**: NodeTypeDefinition, Lovarts.AIModel, ParamDefinition
 - **`src/workflow/types/ipc.ts`**: IPC channel types (workflow:_, execution:_, models:_, cost:_, history:\*, etc.)
 - **`src/workflow/hooks/useFreeToolListener.ts`**: Listens for free-tool execution requests from main process (used by Layout)
 - **`src/workflow/lib/free-tool-runner.ts`**: Runs free-tool nodes (e.g. background-remover) and returns outputs to main
@@ -142,9 +142,9 @@ wavespeed-desktop/
 - **`src/workers/ffmpeg.worker.ts`**: Web Worker for FFmpeg WASM operations (convert, merge, trim, getInfo) with progress reporting
 - **`src/lib/ffmpegFormats.ts`**: Format definitions for video, audio, and image conversion (codecs, extensions, quality presets)
 
-## WaveSpeedAI API
+## Lovarts.AI API
 
-Base URL: `https://api.wavespeed.ai`
+Base URL: `https://api.lovarts.art`
 Authentication: `Authorization: Bearer {API_KEY}`
 
 ### Endpoints
@@ -193,7 +193,7 @@ npm run build:all    # Build for all platforms
 
 ### Adding a new API method
 
-1. Add method to `WaveSpeedClient` class in `src/api/client.ts`
+1. Add method to `Lovarts.AIClient` class in `src/api/client.ts`
 2. Add types in `src/types/` if needed
 
 ### Modifying the build
@@ -244,11 +244,11 @@ The app converts API schema properties to form fields using `src/lib/schemaToFor
 - macOS builds are signed with Developer ID certificate for Gatekeeper compatibility
 - LoRA fields are detected by `x-ui-component: "loras"` or field name matching `loras`
 - Models are sorted by `sort_order` (popularity) by default, with higher values appearing first
-- Documentation URLs follow the pattern: `https://wavespeed.ai/docs/docs-api/{owner}/{model-name}` where slashes after the owner become dashes
+- Documentation URLs follow the pattern: `https://lovarts.art/docs/docs-api/{owner}/{model-name}` where slashes after the owner become dashes
 - The playground supports multiple tabs, each with its own model and form state
 - IPC handlers in `electron/main.ts` include: `get-api-key`, `set-api-key`, `download-file`, `open-external`, plus asset-related handlers (`save-asset`, `delete-asset`, `get-assets-metadata`, `save-assets-metadata`, `open-file-location`, `select-directory`)
-- Templates are stored in localStorage with key `wavespeed_templates`, grouped by model
-- Theme preference is stored in localStorage with key `wavespeed_theme` (auto/dark/light)
+- Templates are stored in localStorage with key `lovarts.art`, grouped by model
+- Theme preference is stored in localStorage with key `Lovarts.AI_theme` (auto/dark/light)
 - Theme "auto" follows system preference and listens for system theme changes
 - Templates can be loaded in playground via URL query param: `/playground/{modelId}?template={templateId}`
 - Auto-update uses electron-updater with support for stable and nightly channels
@@ -261,7 +261,7 @@ The app converts API schema properties to form fields using `src/lib/schemaToFor
 - i18n uses react-i18next with 18 language locales stored in `src/i18n/locales/`
 - Supported languages: en, zh-CN, zh-TW, ja, ko, es, fr, de, ru, it, pt, tr, hi, id, ms, ar, vi, th
 - Language preference is stored in localStorage with key `i18next` and auto-detected from browser
-- Assets are auto-saved by default to `Documents/WaveSpeed/` with subdirectories for images, videos, audio, and text
+- Assets are auto-saved by default to `Documents/Lovarts.AI/` with subdirectories for images, videos, audio, and text
 - Asset metadata is stored in `{userData}/assets-metadata.json` with tags, favorites, and file references
 - Asset file naming format: `{model-slug}_{predictionId}_{resultindex}.{ext}` (e.g., `flux-schnell_pred-abc123_0.png`)
 - Layout.tsx handles unified API key login screen - pages don't need individual ApiKeyRequired checks
@@ -338,7 +338,7 @@ The app converts API schema properties to form fields using `src/lib/schemaToFor
 - Auto-save shows error toast when save fails (tracks savedCount/failedCount in OutputDisplay)
 - Model selector scrolls to the currently selected model when opened (via `data-selected` attribute + `scrollIntoView`)
 - Model selector shows filled yellow star icon for favorite models (uses `isFavorite` from modelsStore)
-- Titlebar WebPage/Documentation links are dynamic: when on playground with a model selected, WebPage links to `https://wavespeed.ai/models/{model_id}`, Documentation links to `https://wavespeed.ai/docs/docs-api/{owner}/{model_id_with_dashes}`
+- Titlebar WebPage/Documentation links are dynamic: when on playground with a model selected, WebPage links to `https://Lovarts.AI.ai/models/{model_id}`, Documentation links to `https://Lovarts.AI.ai/docs/docs-api/{owner}/{model_id_with_dashes}`
 - History drawer (recent generations) expand/collapse state is persisted in localStorage key `historyDrawerExpanded`
 - Sidebar collapse state is persisted in localStorage key `sidebarCollapsed`
 - Playground tabs display raw model_id (no formatting), wider max-width (240px)
