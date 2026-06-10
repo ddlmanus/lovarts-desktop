@@ -2,10 +2,6 @@
 
 Open-source, cross-platform application for running 1000+ AI models — image generation, video generation, face swap, digital human, motion control, and more. Features a visual workflow editor for building AI pipelines, Featured Models with smart variant switching, and 12 free creative tools. Available for **Windows**, **macOS**, **Linux**, and **Android**.
 
-[![GitHub Release](https://img.shields.io/github/v/release/Lovarts.AIAI/Lovarts.AI-desktop?style=flat-square&label=Latest)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest)
-[![License](https://img.shields.io/github/license/Lovarts.AIAI/Lovarts.AI-desktop?style=flat-square)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/Lovarts.AIAI/Lovarts.AI-desktop?style=flat-square)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/stargazers)
-
 [![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDMuNWw5LjktMS40djkuNUgwem0xMS4xLTEuNUwyNCAwdjExLjVIMTEuMXpNMCAxMi42aDkuOXY5LjVMMCAyMC43em0xMS4xLS4xSDI0VjI0bC0xMi45LTEuOHoiLz48L3N2Zz4=&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-win-x64.exe)
 [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-mac-x64.dmg)
 [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/Lovarts.AIAI/Lovarts.AI-desktop/releases/latest/download/Lovarts.AI-Desktop-mac-arm64.dmg)
