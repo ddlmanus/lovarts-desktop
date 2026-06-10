@@ -548,7 +548,7 @@ export function BackgroundRemoverPage() {
               )}
               <span>{t("freeTools.backgroundRemover.generate")}</span>
               {displayPrice && (
-                <span className="font-bold">${displayPrice}</span>
+                <span className="font-bold">¥{displayPrice}</span>
               )}
             </button>
             <button
@@ -565,7 +565,7 @@ export function BackgroundRemoverPage() {
               {t("freeTools.backgroundRemover.credits")}
             </span>
             <span className="font-medium text-white/80">
-              {displayPrice ? `$${displayPrice}` : "-"}
+              {displayPrice ? `¥${displayPrice}` : "-"}
             </span>
           </div>
         </div>

@@ -550,7 +550,7 @@ export function ImageEnhancerPage() {
               )}
               <span>{t("freeTools.imageEnhancer.enhance")}</span>
               {displayPrice && (
-                <span className="font-bold">${displayPrice}</span>
+                <span className="font-bold">¥{displayPrice}</span>
               )}
             </button>
             <button
@@ -567,7 +567,7 @@ export function ImageEnhancerPage() {
               {t("freeTools.imageEnhancer.credits")}
             </span>
             <span className="font-medium text-white/80">
-              {displayPrice ? `$${displayPrice}` : "-"}
+              {displayPrice ? `¥${displayPrice}` : "-"}
             </span>
           </div>
         </div>

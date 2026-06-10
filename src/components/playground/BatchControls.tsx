@@ -79,11 +79,11 @@ export function BatchControls({
       if (price === "...") {
         return <Loader2 className="ml-1.5 h-3 w-3 animate-spin opacity-80" />;
       }
-      const numeric = Number(price.replace(/^\$/, ""));
+      const numeric = Number(price.replace(/^[¥$]/, ""));
       const display = Number.isFinite(numeric)
         ? formatPrice(numeric * priceMultiplier)
         : price;
-      return <span className="ml-1.5 text-xs opacity-80">${display}</span>;
+      return <span className="ml-1.5 text-xs opacity-80">¥{display}</span>;
     }
 
     const original = price.price * priceMultiplier;
@@ -93,7 +93,7 @@ export function BatchControls({
     if (!hasDiscount) {
       return (
         <span className="ml-1.5 text-xs opacity-80">
-          ${formatPrice(original)}
+          ¥{formatPrice(original)}
         </span>
       );
     }
@@ -101,10 +101,10 @@ export function BatchControls({
     return (
       <span className="ml-1.5 inline-flex items-baseline gap-1.5 text-xs">
         <span className="line-through opacity-55">
-          ${formatPrice(original)}
+          ¥{formatPrice(original)}
         </span>
         <span className="font-semibold opacity-95">
-          ${formatPrice(discounted)}
+          ¥{formatPrice(discounted)}
         </span>
       </span>
     );

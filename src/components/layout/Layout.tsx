@@ -19,7 +19,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastAction } from "@/components/ui/toast";
 import { toast } from "@/hooks/useToast";
 import { useApiKeyStore } from "@/stores/apiKeyStore";
-import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { apiClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,8 +31,6 @@ import {
   Loader2,
   Zap,
   ExternalLink,
-  Globe,
-  FileText,
 } from "lucide-react";
 // Lazy-load all persistent pages — only loaded when first visited
 const LazyVideoEnhancerPage = lazy(() =>
@@ -202,24 +199,6 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const hasShownUpdateToast = useRef(false);
-
-  // Get current playground model for dynamic titlebar links
-  const playgroundModelId = usePlaygroundStore(
-    (s) => s.getActiveTab()?.selectedModel?.model_id,
-  );
-  const isOnPlayground =
-    location.pathname === "/playground" ||
-    location.pathname.startsWith("/playground/") ||
-    location.pathname === "/image" ||
-    location.pathname.startsWith("/image/") ||
-    location.pathname === "/video" ||
-    location.pathname.startsWith("/video/") ||
-    location.pathname === "/avatar" ||
-    location.pathname.startsWith("/avatar/") ||
-    location.pathname === "/audio" ||
-    location.pathname.startsWith("/audio/") ||
-    location.pathname === "/3d" ||
-    location.pathname.startsWith("/3d/");
 
   // Register free-tool IPC listener globally (must be always mounted for workflow execution)
   useFreeToolListener();
@@ -462,12 +441,12 @@ export function Layout() {
           <p className="text-xs text-muted-foreground text-center">
             {t("settings.apiKey.getKey")}{" "}
             <a
-              href="https://wavespeed.ai/accesskey"
+              href="https://lovarts.art"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline inline-flex items-center gap-1"
             >
-              wavespeed.ai/accesskey
+              lovarts.art
               <ExternalLink className="h-3 w-3" />
             </a>
           </p>
@@ -504,49 +483,6 @@ export function Layout() {
                   <AppLogo className="h-5 w-5 shrink-0" />
                 </div>
               )}
-              {/* Global WebPage & Documentation buttons */}
-              <div
-                className={
-                  /mac/i.test(navigator.platform)
-                    ? "absolute right-3 top-0 bottom-0 flex items-center gap-1 electron-no-drag"
-                    : "absolute right-[140px] top-0 bottom-0 flex items-center electron-no-drag"
-                }
-              >
-                <a
-                  href={
-                    isOnPlayground && playgroundModelId
-                      ? `https://wavespeed.ai/models/${playgroundModelId}`
-                      : "https://wavespeed.ai/dashboard"
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={t("playground.webPage", "WebPage")}
-                  className={
-                    /mac/i.test(navigator.platform)
-                      ? "flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                      : "flex items-center justify-center h-8 w-[46px] text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.1)] transition-colors"
-                  }
-                >
-                  <Globe className="h-4 w-4" />
-                </a>
-                <a
-                  href={
-                    isOnPlayground && playgroundModelId
-                      ? `https://wavespeed.ai/docs/docs-api/${playgroundModelId.split("/")[0]}/${playgroundModelId.replace(/\//g, "-")}`
-                      : "https://wavespeed.ai/docs"
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={t("playground.docs", "Documentation")}
-                  className={
-                    /mac/i.test(navigator.platform)
-                      ? "flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                      : "flex items-center justify-center h-8 w-[46px] text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.1)] transition-colors"
-                  }
-                >
-                  <FileText className="h-4 w-4" />
-                </a>
-              </div>
             </div>
           )}
           <div className="flex flex-1 overflow-hidden">

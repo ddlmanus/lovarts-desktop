@@ -191,6 +191,28 @@ export interface PricingResult {
   discountRate?: number;
 }
 
+export interface BalanceTransaction {
+  id: string;
+  amount: number;
+  balance_before: number;
+  balance_after: number;
+  currency: string;
+  type: string;
+  source: string;
+  reference_id: string | null;
+  model_id: string | null;
+  description: string | null;
+  created_at: string;
+}
+
+export interface BalanceTransactionsResult {
+  items: BalanceTransaction[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 interface PricingPayload {
   unit_price?: number;
   base_price?: number;
@@ -658,49 +680,54 @@ class WaveSpeedClient {
     modelId: string,
     inputs: Record<string, unknown>,
   ): Promise<PricingResult> {
-    const promotionRatePromise = this.getPromotionDiscountRate(modelId);
+    const useOfficialPricing = this.isOfficialWaveSpeedBaseUrl();
+    const promotionRatePromise = useOfficialPricing
+      ? this.getPromotionDiscountRate(modelId)
+      : Promise.resolve(undefined);
 
-    try {
-      const response = await this.webClient.post<{
-        code: number;
-        message: string;
-        data: PricingPayload;
-      }>("/default/api/v1/model_product/calculate", {
-        model_uuid: modelId,
-        inputs,
-      });
+    if (useOfficialPricing) {
+      try {
+        const response = await this.webClient.post<{
+          code: number;
+          message: string;
+          data: PricingPayload;
+        }>("/default/api/v1/model_product/calculate", {
+          model_uuid: modelId,
+          inputs,
+        });
 
-      if (response.data.code !== 200) {
-        throw new APIError(
-          response.data.message || "Failed to calculate pricing",
-          {
-            code: response.data.code,
-            details: response.data,
-          },
+        if (response.data.code !== 200) {
+          throw new APIError(
+            response.data.message || "Failed to calculate pricing",
+            {
+              code: response.data.code,
+              details: response.data,
+            },
+          );
+        }
+
+        const pricing = this.normalizePricingResult(response.data.data);
+        const promotionRate = await promotionRatePromise;
+        if (
+          typeof promotionRate === "number" &&
+          promotionRate > 0 &&
+          promotionRate < 100 &&
+          pricing.discountedPrice >= pricing.price
+        ) {
+          return {
+            price: pricing.price,
+            discountedPrice: pricing.price * (promotionRate / 100),
+            discountRate: promotionRate,
+          };
+        }
+
+        return pricing;
+      } catch (error) {
+        console.warn(
+          "[pricing] Official web pricing failed; falling back to API v3 pricing",
+          error,
         );
       }
-
-      const pricing = this.normalizePricingResult(response.data.data);
-      const promotionRate = await promotionRatePromise;
-      if (
-        typeof promotionRate === "number" &&
-        promotionRate > 0 &&
-        promotionRate < 100 &&
-        pricing.discountedPrice >= pricing.price
-      ) {
-        return {
-          price: pricing.price,
-          discountedPrice: pricing.price * (promotionRate / 100),
-          discountRate: promotionRate,
-        };
-      }
-
-      return pricing;
-    } catch (error) {
-      console.warn(
-        "[pricing] Official web pricing failed; falling back to API v3 pricing",
-        error,
-      );
     }
 
     try {
@@ -868,6 +895,35 @@ class WaveSpeedClient {
       return response.data.data.balance;
     } catch (error) {
       throw createAPIError(error, "Failed to fetch balance");
+    }
+  }
+
+  async getBalanceTransactions(
+    page = 1,
+    pageSize = 20,
+  ): Promise<BalanceTransactionsResult> {
+    try {
+      const response = await this.client.get<{
+        code: number;
+        message: string;
+        data: BalanceTransactionsResult;
+      }>("/api/v3/balance/transactions", {
+        params: { page, page_size: pageSize },
+      });
+
+      if (response.data.code !== 200) {
+        throw new APIError(
+          response.data.message || "Failed to fetch balance transactions",
+          {
+            code: response.data.code,
+            details: response.data,
+          },
+        );
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw createAPIError(error, "Failed to fetch balance transactions");
     }
   }
 }

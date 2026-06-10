@@ -610,7 +610,7 @@ export function ImageWatermarkRemoverPage() {
               )}
               <span>{t("freeTools.watermarkRemover.generate")}</span>
               {displayPrice && (
-                <span className="font-bold">${displayPrice}</span>
+                <span className="font-bold">¥{displayPrice}</span>
               )}
             </button>
             <button
@@ -627,7 +627,7 @@ export function ImageWatermarkRemoverPage() {
               {t("freeTools.watermarkRemover.credits")}
             </span>
             <span className="font-medium text-white/80">
-              {displayPrice ? `$${displayPrice}` : "-"}
+              {displayPrice ? `¥${displayPrice}` : "-"}
             </span>
           </div>
         </div>

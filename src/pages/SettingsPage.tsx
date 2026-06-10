@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useApiKeyStore } from "@/stores/apiKeyStore";
-import { API_SERVICE_PRESETS, apiClient, type ApiServiceId } from "@/api/client";
+import {
+  API_SERVICE_PRESETS,
+  apiClient,
+  type ApiServiceId,
+  type BalanceTransaction,
+} from "@/api/client";
 import { useApiServiceStore } from "@/stores/apiServiceStore";
 import { useThemeStore, type Theme } from "@/stores/themeStore";
 import { useAssetsStore } from "@/stores/assetsStore";
@@ -70,6 +75,7 @@ import {
   X,
   Clock,
   Settings,
+  ReceiptText,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
@@ -113,6 +119,24 @@ function createPredownloadStates() {
     },
     {},
   );
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString();
+}
+
+function getBalanceTransactionTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    CONSUME: "消费",
+    REFUND: "退款",
+    RECHARGE: "充值",
+    ADMIN_ADJUST: "后台调整",
+    MANUAL_CORRECTION: "人工修正",
+  };
+  return labels[type] || type || "其他";
 }
 
 export function SettingsPage() {
@@ -166,6 +190,16 @@ export function SettingsPage() {
   // Balance state
   const [balance, setBalance] = useState<number | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [showBalanceTransactions, setShowBalanceTransactions] = useState(false);
+  const [balanceTransactions, setBalanceTransactions] = useState<
+    BalanceTransaction[]
+  >([]);
+  const [balanceTransactionsPage, setBalanceTransactionsPage] = useState(1);
+  const [balanceTransactionsTotalPages, setBalanceTransactionsTotalPages] =
+    useState(1);
+  const [balanceTransactionsTotal, setBalanceTransactionsTotal] = useState(0);
+  const [isLoadingBalanceTransactions, setIsLoadingBalanceTransactions] =
+    useState(false);
 
   // Update state
   const [appVersion, setAppVersion] = useState<string>("");
@@ -541,6 +575,37 @@ export function SettingsPage() {
       setIsLoadingBalance(false);
     }
   }, [isValidated, t]);
+
+  const fetchBalanceTransactions = useCallback(
+    async (page = 1) => {
+      if (!isValidated) return;
+      setIsLoadingBalanceTransactions(true);
+      try {
+        const result = await apiClient.getBalanceTransactions(page, 20);
+        setBalanceTransactions(result.items || []);
+        setBalanceTransactionsPage(result.page || page);
+        setBalanceTransactionsTotalPages(result.total_pages || 1);
+        setBalanceTransactionsTotal(result.total || 0);
+      } catch {
+        toast({
+          title: t("common.error"),
+          description: t(
+            "settings.balance.transactionsRefreshFailed",
+            "Failed to fetch balance transactions",
+          ),
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingBalanceTransactions(false);
+      }
+    },
+    [isValidated, t],
+  );
+
+  const openBalanceTransactions = useCallback(() => {
+    setShowBalanceTransactions(true);
+    void fetchBalanceTransactions(1);
+  }, [fetchBalanceTransactions]);
 
   // Delete a single cache item
   const handleDeleteCacheItem = useCallback(
@@ -1073,7 +1138,8 @@ export function SettingsPage() {
             <div>
               <CardTitle>默认服务</CardTitle>
               <CardDescription>
-                设置整个桌面端默认调用的 API 服务。模型、生成、上传、余额都会使用这里的地址。
+                设置整个桌面端默认调用的 API
+                服务。模型、生成、上传、余额都会使用这里的地址。
               </CardDescription>
             </div>
             <Badge variant="secondary" className="shrink-0">
@@ -1097,7 +1163,8 @@ export function SettingsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ideart-production">
-                  Lovarts.art ({API_SERVICE_PRESETS["ideart-production"].baseUrl})
+                  Lovarts.art (
+                  {API_SERVICE_PRESETS["ideart-production"].baseUrl})
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -1199,12 +1266,12 @@ export function SettingsPage() {
             <p className="text-xs text-muted-foreground">
               {t("settings.apiKey.getKey")}{" "}
               <a
-                href="https://wavespeed.ai/accesskey"
+                href="https://lovarts.art"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
               >
-                wavespeed.ai/accesskey
+                lovarts.art
               </a>
             </p>
           </div>
@@ -1237,16 +1304,28 @@ export function SettingsPage() {
                   {t("settings.balance.description")}
                 </CardDescription>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={fetchBalance}
-                disabled={isLoadingBalance}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isLoadingBalance ? "animate-spin" : ""}`}
-                />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={openBalanceTransactions}
+                  disabled={!isValidated}
+                  title={t("settings.balance.transactions", "Transactions")}
+                >
+                  <ReceiptText className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={fetchBalance}
+                  disabled={isLoadingBalance}
+                  title={t("common.refresh", "Refresh")}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${isLoadingBalance ? "animate-spin" : ""}`}
+                  />
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -1255,7 +1334,7 @@ export function SettingsPage() {
                 {isLoadingBalance ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : balance !== null ? (
-                  `$${balance.toFixed(2)}`
+                  `¥${balance.toFixed(2)}`
                 ) : (
                   "—"
                 )}
@@ -1275,7 +1354,10 @@ export function SettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="theme">{t("settings.appearance.theme")}</Label>
-            <Select value="dark" onValueChange={() => setTheme("dark" as Theme)}>
+            <Select
+              value="dark"
+              onValueChange={() => setTheme("dark" as Theme)}
+            >
               <SelectTrigger id="theme" className="w-[200px]">
                 <SelectValue placeholder={t("settings.appearance.theme")} />
               </SelectTrigger>
@@ -1570,6 +1652,141 @@ export function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={showBalanceTransactions}
+        onOpenChange={setShowBalanceTransactions}
+      >
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>
+                {t("settings.balance.transactions", "Balance Details")}
+              </span>
+              <span className="text-sm font-normal text-muted-foreground">
+                {t("settings.balance.transactionTotal", {
+                  count: balanceTransactionsTotal,
+                  defaultValue: "{{count}} records",
+                })}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto -mx-6 px-6">
+            {isLoadingBalanceTransactions ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t("common.loading", "Loading...")}
+              </div>
+            ) : balanceTransactions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-12">
+                {t("settings.balance.noTransactions", "No balance records")}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground">
+                    <tr className="border-b">
+                      <th className="py-2 pr-4 text-left font-medium">
+                        {t("settings.balance.time", "Time")}
+                      </th>
+                      <th className="py-2 pr-4 text-left font-medium">
+                        {t("settings.balance.type", "Type")}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t("settings.balance.amount", "Amount")}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t("settings.balance.balanceAfter", "Balance")}
+                      </th>
+                      <th className="py-2 pr-4 text-left font-medium">
+                        {t("settings.balance.model", "Model")}
+                      </th>
+                      <th className="py-2 text-left font-medium">
+                        {t("settings.balance.descriptionLabel", "Description")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {balanceTransactions.map((item) => (
+                      <tr key={item.id} className="border-b last:border-0">
+                        <td className="py-3 pr-4 whitespace-nowrap text-muted-foreground">
+                          {formatDateTime(item.created_at)}
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          {getBalanceTransactionTypeLabel(item.type)}
+                        </td>
+                        <td
+                          className={`py-3 pr-4 text-right font-medium ${
+                            item.amount >= 0
+                              ? "text-emerald-500"
+                              : "text-foreground"
+                          }`}
+                        >
+                          {item.amount >= 0 ? "+" : "-"}¥
+                          {Math.abs(item.amount).toFixed(4)}
+                        </td>
+                        <td className="py-3 pr-4 text-right whitespace-nowrap">
+                          ¥{item.balance_after.toFixed(4)}
+                        </td>
+                        <td
+                          className="py-3 pr-4 max-w-[180px] truncate text-muted-foreground"
+                          title={item.model_id || undefined}
+                        >
+                          {item.model_id || "-"}
+                        </td>
+                        <td
+                          className="py-3 max-w-[240px] truncate text-muted-foreground"
+                          title={
+                            item.description || item.reference_id || undefined
+                          }
+                        >
+                          {item.description || item.reference_id || "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between border-t pt-4 text-sm">
+            <span className="text-muted-foreground">
+              {t("settings.balance.transactionPage", {
+                page: balanceTransactionsPage,
+                totalPages: balanceTransactionsTotalPages,
+                defaultValue: "Page {{page}} / {{totalPages}}",
+              })}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  balanceTransactionsPage <= 1 || isLoadingBalanceTransactions
+                }
+                onClick={() =>
+                  fetchBalanceTransactions(balanceTransactionsPage - 1)
+                }
+              >
+                {t("common.previous", "Previous")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  balanceTransactionsPage >= balanceTransactionsTotalPages ||
+                  isLoadingBalanceTransactions
+                }
+                onClick={() =>
+                  fetchBalanceTransactions(balanceTransactionsPage + 1)
+                }
+              >
+                {t("common.next", "Next")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Cache Details Dialog */}
       <Dialog open={showCacheDialog} onOpenChange={setShowCacheDialog}>

@@ -693,7 +693,7 @@ export function VideoEraserPage() {
               )}
               <span>{t("freeTools.videoEraser.generate")}</span>
               {displayPrice && (
-                <span className="font-bold">${displayPrice}</span>
+                <span className="font-bold">¥{displayPrice}</span>
               )}
             </button>
             <button
@@ -713,7 +713,7 @@ export function VideoEraserPage() {
               {isBalanceLoading
                 ? t("common.loading", "Loading...")
                 : displayBalance
-                  ? `$${displayBalance}`
+                  ? `¥${displayBalance}`
                   : "-"}
             </span>
           </div>

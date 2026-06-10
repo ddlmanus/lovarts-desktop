@@ -142,7 +142,7 @@ const ModelCard = memo(function ModelCard({
         <div className="flex items-center justify-between mt-auto">
           {model.base_price !== undefined && (
             <span className="text-xs font-semibold text-primary">
-              ${model.base_price.toFixed(4)}
+              ¥{model.base_price.toFixed(4)}
             </span>
           )}
           <div className="flex gap-0.5 ml-auto">
@@ -176,7 +176,7 @@ const ModelCard = memo(function ModelCard({
                     )}
                     {model.base_price !== undefined && (
                       <p className="text-[10px] opacity-80">
-                        {t("models.basePrice")}: ${model.base_price.toFixed(4)}
+                        {t("models.basePrice")}: ¥{model.base_price.toFixed(4)}
                       </p>
                     )}
                   </div>
@@ -221,7 +221,7 @@ const ModelCard = memo(function ModelCard({
                           {t("models.basePrice")}:
                         </span>
                         <span className="font-medium text-primary">
-                          ${model.base_price.toFixed(4)}
+                          ¥{model.base_price.toFixed(4)}
                         </span>
                       </div>
                     )}

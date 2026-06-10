@@ -200,18 +200,16 @@ function GenerationCardView({
           </div>
         )}
 
-        <span
-          className={cn(
-            "absolute right-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold",
-            isRunning
-              ? "bg-blue-500 text-white"
-              : isFailed
-                ? "bg-red-500 text-white"
-                : "bg-emerald-500 text-white",
-          )}
-        >
-          {isRunning ? "生成中" : isFailed ? "失败" : "已完成"}
-        </span>
+        {(isRunning || isFailed) && (
+          <span
+            className={cn(
+              "absolute right-3 top-3 z-20 rounded-full px-2.5 py-1 text-xs font-semibold",
+              isRunning ? "bg-blue-500 text-white" : "bg-red-500 text-white",
+            )}
+          >
+            {isRunning ? "生成中" : "失败"}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-3 border-t border-white/[0.06] px-3 py-2.5">

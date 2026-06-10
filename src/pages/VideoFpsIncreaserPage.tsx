@@ -229,9 +229,7 @@ export function VideoFpsIncreaserPage() {
 
   const resolvedModel = useMemo(
     () =>
-      models.find(
-        (model) => model.model_id === VIDEO_FPS_INCREASER_MODEL_ID,
-      ),
+      models.find((model) => model.model_id === VIDEO_FPS_INCREASER_MODEL_ID),
     [models],
   );
   const price = useMemo(() => {
@@ -590,7 +588,7 @@ export function VideoFpsIncreaserPage() {
               )}
               <span>{t("freeTools.videoFpsIncreaser.generate")}</span>
               {displayPrice && (
-                <span className="font-bold">${displayPrice}</span>
+                <span className="font-bold">¥{displayPrice}</span>
               )}
             </button>
             <button
@@ -610,7 +608,7 @@ export function VideoFpsIncreaserPage() {
               {isBalanceLoading
                 ? t("common.loading", "Loading...")
                 : displayBalance
-                  ? `$${displayBalance}`
+                  ? `¥${displayBalance}`
                   : "-"}
             </span>
           </div>

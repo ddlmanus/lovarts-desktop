@@ -617,9 +617,20 @@
     },
     "balance": {
       "title": "Account Balance",
-      "description": "Your current WaveSpeed account balance",
+      "description": "Your current Lovarts account balance",
       "currentBalance": "Current Balance",
-      "refreshFailed": "Failed to fetch balance"
+      "refreshFailed": "Failed to fetch balance",
+      "transactions": "Balance Details",
+      "transactionsRefreshFailed": "Failed to fetch balance records",
+      "transactionTotal": "{{count}} records",
+      "noTransactions": "No balance records",
+      "time": "Time",
+      "type": "Type",
+      "amount": "Amount",
+      "balanceAfter": "Balance",
+      "model": "Model",
+      "descriptionLabel": "Description",
+      "transactionPage": "Page {{page}} / {{totalPages}}"
     },
     "appearance": {
       "title": "Appearance",

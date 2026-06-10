@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Model } from "@/types/model";
-import { getModelWorkspace, type PlaygroundWorkspace } from "@/stores/playgroundStore";
+import {
+  getModelWorkspace,
+  type PlaygroundWorkspace,
+} from "@/stores/playgroundStore";
 
 const FEATURED_MODEL_FAMILIES: Array<{
   name: string;
@@ -158,7 +161,7 @@ function PosterCard({
           ))}
           {price !== undefined && (
             <span className="text-[8px] rounded-full px-1.5 py-[2px] leading-none text-white/90 bg-white/20 ml-auto">
-              ${price.toFixed(3)}
+              ¥{price.toFixed(3)}
             </span>
           )}
         </div>
@@ -197,11 +200,13 @@ export function FeaturedModelsPanel({
     },
     video: {
       title: "精选视频模型",
-      description: "精选视频模型，专注动画、运镜、图生视频与高质量 motion generation。",
+      description:
+        "精选视频模型，专注动画、运镜、图生视频与高质量 motion generation。",
     },
     avatar: {
       title: "精选数字人模型",
-      description: "精选数字人模型，专注人物驱动、口型同步、角色动画和 talking head。",
+      description:
+        "精选数字人模型，专注人物驱动、口型同步、角色动画和 talking head。",
     },
     audio: {
       title: "精选音频模型",
@@ -232,7 +237,9 @@ export function FeaturedModelsPanel({
       <div className="p-3 space-y-3">
         {/* Header */}
         <div className="pb-1 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both">
-          <h3 className="text-2xl font-bold tracking-tight text-foreground">{title}</h3>
+          <h3 className="text-2xl font-bold tracking-tight text-foreground">
+            {title}
+          </h3>
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
             {description}
           </p>

@@ -589,7 +589,7 @@ export function FaceSwapperPage() {
               )}
               <span>{t("freeTools.faceSwapper.generate")}</span>
               {displayPrice && (
-                <span className="font-bold">${displayPrice}</span>
+                <span className="font-bold">¥{displayPrice}</span>
               )}
             </button>
             <button
@@ -606,7 +606,7 @@ export function FaceSwapperPage() {
               {t("freeTools.faceSwapper.credits")}
             </span>
             <span className="font-medium text-white/80">
-              {displayPrice ? `$${displayPrice}` : "-"}
+              {displayPrice ? `¥${displayPrice}` : "-"}
             </span>
           </div>
         </div>

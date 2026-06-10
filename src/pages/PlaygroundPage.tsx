@@ -206,6 +206,7 @@ export function PlaygroundPage({
     setUploading,
     reorderTab,
     consumePendingFormValues,
+    validateForm,
   } = usePlaygroundStore();
   const { templates, loadTemplates, createTemplate, migrateFromLocalStorage } =
     useTemplateStore();
@@ -804,6 +805,91 @@ export function PlaygroundPage({
     [setFormValue, activeTabId],
   );
 
+  const buildPricingInput = useCallback(() => {
+    if (!activeTab) return null;
+    const defaults = getDefaultValues(activeTab.formFields);
+    const mergedValues = { ...defaults, ...activeTab.formValues };
+    const cleanedInput: Record<string, unknown> = {};
+    const integerFields = new Set(
+      activeTab.formFields
+        .filter((field) => field.schemaType === "integer")
+        .map((field) => field.name),
+    );
+
+    for (const [key, value] of Object.entries(mergedValues)) {
+      if (
+        value !== "" &&
+        value !== undefined &&
+        value !== null &&
+        !(Array.isArray(value) && value.length === 0)
+      ) {
+        cleanedInput[key] =
+          integerFields.has(key) && typeof value === "number"
+            ? Math.round(value)
+            : value;
+      }
+    }
+
+    return normalizePayloadArrays(cleanedInput, activeTab.formFields);
+  }, [activeTab]);
+
+  const ensureSufficientBalanceForRun = useCallback(async () => {
+    if (!activeTab?.selectedModel) return false;
+    if (!validateForm()) return false;
+
+    const pricingInput = buildPricingInput();
+    if (!pricingInput) return false;
+
+    const repeatCount =
+      activeTab.batchConfig.enabled && activeTab.batchConfig.repeatCount > 1
+        ? activeTab.batchConfig.repeatCount
+        : 1;
+
+    setIsPricingLoading(true);
+    try {
+      const price = await apiClient.calculatePricing(
+        activeTab.selectedModel.model_id,
+        pricingInput,
+      );
+      const discountRate =
+        price.discountRate ?? getModelDiscountRate(activeTab.selectedModel);
+      const nextPrice = {
+        price: price.price,
+        discountedPrice:
+          price.discountedPrice !== price.price
+            ? price.discountedPrice
+            : applyDiscount(price.price, discountRate).discountedPrice,
+        discountRate,
+      };
+      setCalculatedPrice(nextPrice);
+      setCalculatedPriceKey(currentPricingKey);
+
+      const requiredBalance = nextPrice.discountedPrice * repeatCount;
+      const balance = await apiClient.getBalance();
+      if (balance + 0.0001 < requiredBalance) {
+        toast({
+          title: "余额不足",
+          description: `当前余额 ¥${balance.toFixed(4)}，本次预计需要 ¥${requiredBalance.toFixed(4)}，请充值后再运行。`,
+          variant: "destructive",
+        });
+        return false;
+      }
+      return true;
+    } catch (error) {
+      toast({
+        title: "无法校验余额",
+        description:
+          error instanceof Error
+            ? error.message
+            : "运行前余额校验失败，请稍后重试。",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsPricingLoading(false);
+    }
+  }, [activeTab, buildPricingInput, currentPricingKey, validateForm]);
+
   const handleSetDefaults = useCallback(
     (defaults: Record<string, unknown>) => {
       const pending = consumePendingFormValues();
@@ -849,6 +935,8 @@ export function PlaygroundPage({
 
   const handleRun = useCallback(async () => {
     if (!activeTab) return;
+    const canRun = await ensureSufficientBalanceForRun();
+    if (!canRun) return;
 
     // Switch to output view on mobile when running
     setMobileView("output");
@@ -862,7 +950,14 @@ export function PlaygroundPage({
       await runPrediction();
     }
     void fetchMyGenerations();
-  }, [activeTab, switchTab, runBatch, runPrediction, fetchMyGenerations]);
+  }, [
+    activeTab,
+    ensureSufficientBalanceForRun,
+    switchTab,
+    runBatch,
+    runPrediction,
+    fetchMyGenerations,
+  ]);
 
   // Ctrl+Enter / Cmd+Enter to run; Ctrl+W / Cmd+W to close active tab
   useEffect(() => {

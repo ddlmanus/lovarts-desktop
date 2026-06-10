@@ -30,8 +30,7 @@ import {
   X,
 } from "lucide-react";
 
-const VIDEO_WATERMARK_REMOVER_MODEL_ID =
-  "wavespeed-ai/video-watermark-remover";
+const VIDEO_WATERMARK_REMOVER_MODEL_ID = "wavespeed-ai/video-watermark-remover";
 
 function getRequestProperties(model?: Model) {
   return (
@@ -591,7 +590,7 @@ export function VideoWatermarkRemoverPage() {
               )}
               <span>{t("freeTools.videoWatermarkRemover.generate")}</span>
               {displayPrice && (
-                <span className="font-bold">${displayPrice}</span>
+                <span className="font-bold">¥{displayPrice}</span>
               )}
             </button>
             <button
@@ -611,7 +610,7 @@ export function VideoWatermarkRemoverPage() {
               {isBalanceLoading
                 ? t("common.loading", "Loading...")
                 : displayBalance
-                  ? `$${displayBalance}`
+                  ? `¥${displayBalance}`
                   : "-"}
             </span>
           </div>

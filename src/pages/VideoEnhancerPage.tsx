@@ -563,7 +563,7 @@ export function VideoEnhancerPage() {
               )}
               <span>{t("freeTools.videoEnhancer.generate")}</span>
               {displayPrice && (
-                <span className="font-bold">${displayPrice}</span>
+                <span className="font-bold">¥{displayPrice}</span>
               )}
             </button>
             <button
@@ -583,7 +583,7 @@ export function VideoEnhancerPage() {
               {isBalanceLoading
                 ? t("common.loading", "Loading...")
                 : displayBalance
-                  ? `$${displayBalance}`
+                  ? `¥${displayBalance}`
                   : "-"}
             </span>
           </div>

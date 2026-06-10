@@ -643,7 +643,7 @@ export function SmartPlaygroundPage() {
               </Badge>
               {displayPrice !== null ? (
                 <span className="text-[10px] text-muted-foreground font-medium">
-                  ${displayPrice.discountedPrice.toFixed(4)}
+                  ¥{displayPrice.discountedPrice.toFixed(4)}
                 </span>
               ) : isPricingLoading ? (
                 <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
@@ -800,7 +800,7 @@ export function SmartPlaygroundPage() {
                       <span className="ml-1 inline-flex items-baseline gap-1 opacity-80">
                         {displayPrice.discountedPrice < displayPrice.price && (
                           <span className="line-through opacity-60">
-                            $
+                            ¥
                             {(
                               displayPrice.price *
                               (batchEnabled ? batchCount : 1)
@@ -808,7 +808,7 @@ export function SmartPlaygroundPage() {
                           </span>
                         )}
                         <span>
-                          ($
+                          (¥
                           {(
                             displayPrice.discountedPrice *
                             (batchEnabled ? batchCount : 1)

@@ -619,7 +619,18 @@
       "title": "账户余额",
       "description": "您当前的 Lovarts 账户余额",
       "currentBalance": "当前余额",
-      "refreshFailed": "获取余额失败"
+      "refreshFailed": "获取余额失败",
+      "transactions": "余额明细",
+      "transactionsRefreshFailed": "获取余额明细失败",
+      "transactionTotal": "{{count}} 条记录",
+      "noTransactions": "暂无余额记录",
+      "time": "时间",
+      "type": "类型",
+      "amount": "金额",
+      "balanceAfter": "余额",
+      "model": "模型",
+      "descriptionLabel": "说明",
+      "transactionPage": "第 {{page}} / {{totalPages}} 页"
     },
     "appearance": {
       "title": "外观",
