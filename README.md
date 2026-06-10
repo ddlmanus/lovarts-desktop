@@ -8,7 +8,8 @@ Open-source, cross-platform application for running 1000+ AI models — image ge
 [![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/lovarts.artAI/lovarts.art-desktop/releases/latest/download/lovarts.art-Desktop-linux-x86_64.AppImage)
 [![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/lovarts.artAI/lovarts.art-desktop/releases/latest/download/lovarts.art-Mobile.apk)
 
-![Playground Screenshot](https://github.com/user-attachments/assets/054a45d8-9bbc-4f1b-8cc1-b6fa4b3b2aac)
+![Playground Screenshot](![Uploading image.png…]()
+)
 
 ## Android App
 
