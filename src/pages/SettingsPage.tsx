@@ -157,7 +157,9 @@ export function SettingsPage() {
   }, [apiKey]);
 
   useEffect(() => {
-    setServiceDraft(serviceId);
+    setServiceDraft(
+      serviceId === "ideart-production" ? serviceId : "ideart-production",
+    );
     setCustomBaseUrlDraft(customBaseUrl);
   }, [customBaseUrl, serviceId]);
 
@@ -1083,23 +1085,20 @@ export function SettingsPage() {
           <div className="space-y-2">
             <Label htmlFor="apiService">默认配置</Label>
             <Select
-              value={serviceDraft}
+              value={
+                serviceDraft === "ideart-production"
+                  ? serviceDraft
+                  : "ideart-production"
+              }
               onValueChange={(value) => setServiceDraft(value as ApiServiceId)}
             >
               <SelectTrigger id="apiService">
                 <SelectValue placeholder="选择默认服务" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="wavespeed">
-                  WaveSpeed 官方 ({API_SERVICE_PRESETS.wavespeed.baseUrl})
-                </SelectItem>
-                <SelectItem value="ideart-local">
-                  本地 Ideart ({API_SERVICE_PRESETS["ideart-local"].baseUrl})
-                </SelectItem>
                 <SelectItem value="ideart-production">
                   Lovarts.art ({API_SERVICE_PRESETS["ideart-production"].baseUrl})
                 </SelectItem>
-                <SelectItem value="custom">自定义服务地址</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1844,7 +1843,7 @@ export function SettingsPage() {
             variant="outline"
             onClick={() =>
               window.open(
-                "https://github.com/WaveSpeedAI/wavespeed-desktop",
+                "https://github.com/ddlmanus/lovarts-desktop",
                 "_blank",
               )
             }

@@ -1524,7 +1524,7 @@ function setupAutoUpdater() {
     // Use generic provider pointing to nightly release assets
     autoUpdater.setFeedURL({
       provider: "generic",
-      url: "https://github.com/WaveSpeedAI/wavespeed-desktop/releases/download/nightly",
+      url: "https://github.com/ddlmanus/lovarts-desktop/releases/download/nightly",
     });
   } else {
     autoUpdater.allowPrerelease = false;
@@ -1623,15 +1623,15 @@ ipcMain.handle("set-update-channel", (_, channel: "stable" | "nightly") => {
     // Use generic provider pointing to nightly release assets
     autoUpdater.setFeedURL({
       provider: "generic",
-      url: "https://github.com/WaveSpeedAI/wavespeed-desktop/releases/download/nightly",
+      url: "https://github.com/ddlmanus/lovarts-desktop/releases/download/nightly",
     });
   } else {
     autoUpdater.allowPrerelease = false;
     autoUpdater.channel = "latest";
     autoUpdater.setFeedURL({
       provider: "github",
-      owner: "WaveSpeedAI",
-      repo: "wavespeed-desktop",
+      owner: "ddlmanus",
+      repo: "lovarts-desktop",
       releaseType: "release",
     });
   }
@@ -2265,7 +2265,7 @@ protocol.registerSchemesAsPrivileged([
 
 // App lifecycle
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId("com.wavespeed.desktop");
+  electronApp.setAppUserModelId("com.lovarts.desktop");
 
   // Handle local-asset:// protocol for loading local files (videos, images, etc.)
   protocol.handle("local-asset", (request) => {

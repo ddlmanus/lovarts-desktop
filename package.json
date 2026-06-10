@@ -1,7 +1,7 @@
 {
-  "name": "wavespeed-desktop",
+  "name": "lovarts-ai-desktop",
   "version": "2.1.7",
-  "description": "WaveSpeedAI Desktop Application - A playground for AI models",
+  "description": "Lovarts.AI Desktop Application - A playground for AI models",
   "main": "./out/main/index.js",
   "author": {
     "name": "WaveSpeed",
@@ -10,7 +10,7 @@
   "homepage": "https://wavespeed.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/WaveSpeedAI/wavespeed-desktop"
+    "url": "https://github.com/ddlmanus/lovarts-desktop"
   },
   "scripts": {
     "dev": "electron-vite dev",
@@ -107,9 +107,9 @@
     "zustand": "^4.5.7"
   },
   "build": {
-    "appId": "com.wavespeed.desktop",
-    "productName": "Lovart.AI",
-    "artifactName": "WaveSpeed-Desktop-${os}-${arch}.${ext}",
+    "appId": "com.lovarts.desktop",
+    "productName": "Lovarts.AI",
+    "artifactName": "Lovarts.AI-Desktop-${os}-${arch}.${ext}",
     "directories": {
       "buildResources": "build",
       "output": "dist"
@@ -157,8 +157,8 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": true,
       "extendInfo": {
-        "NSCameraUsageDescription": "Lovart.AI needs camera access to capture photos and record videos for AI model inputs.",
-        "NSMicrophoneUsageDescription": "Lovart.AI needs microphone access to record audio and video with sound for AI model inputs."
+        "NSCameraUsageDescription": "Lovarts.AI needs camera access to capture photos and record videos for AI model inputs.",
+        "NSMicrophoneUsageDescription": "Lovarts.AI needs microphone access to record audio and video with sound for AI model inputs."
       }
     },
     "dmg": {
@@ -212,8 +212,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "WaveSpeedAI",
-      "repo": "wavespeed-desktop",
+      "owner": "ddlmanus",
+      "repo": "lovarts-desktop",
       "releaseType": "release"
     }
   }

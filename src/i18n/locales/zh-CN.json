@@ -483,7 +483,7 @@
   "assets": {
     "title": "我的资产",
     "subtitle": "{{count}} 个已保存的输出",
-    "apiKeyRequired": "请配置您的 WaveSpeed API 密钥以查看资产。",
+    "apiKeyRequired": "请配置您的 Lovarts API 密钥以查看资产。",
     "noAssets": "暂无资产",
     "noAssetsDesc": "在设置中启用自动保存以自动保存生成的输出，或从演练场手动保存。",
     "noMatchingAssets": "没有资产匹配您的筛选条件",
@@ -595,10 +595,10 @@
   "settings": {
     "title": "设置",
     "description": "配置您的 Lovart.AI 应用程序",
-    "mobileDescription": "配置您的 WaveSpeed Mobile 应用程序",
+    "mobileDescription": "配置您的 Lovarts Mobile 应用程序",
     "apiKey": {
       "title": "API 密钥",
-      "description": "输入您的 WaveSpeed API 密钥以访问模型",
+      "description": "输入您的 Lovarts.art API 密钥以访问模型",
       "label": "API 密钥",
       "placeholder": "输入您的 API 密钥",
       "getKey": "从以下网站获取您的 API 密钥",
@@ -617,7 +617,7 @@
     },
     "balance": {
       "title": "账户余额",
-      "description": "您当前的 WaveSpeed 账户余额",
+      "description": "您当前的 Lovarts 账户余额",
       "currentBalance": "当前余额",
       "refreshFailed": "获取余额失败"
     },
@@ -649,7 +649,7 @@
       "autoSaveDisabledDesc": "您仍可从演练场手动保存输出",
       "directory": "资产目录",
       "directoryDesc": "选择保存生成输出的位置",
-      "defaultDirectory": "文档/WaveSpeed",
+      "defaultDirectory": "文档/Lovarts",
       "browse": "浏览",
       "directoryChanged": "目录已更改",
       "directoryChangedDesc": "新输出将保存到 {{path}}",
@@ -740,16 +740,16 @@
     "about": {
       "title": "关于",
       "description": "Lovart.AI - AI 模型演练场",
-      "aboutText": "一个用于运行 WaveSpeed API AI 模型的开源桌面应用程序。",
+      "aboutText": "一个用于运行 Lovarts API AI 模型的开源桌面应用程序。",
       "viewOnGitHub": "在 GitHub 上查看",
       "version": "版本",
-      "mobileDescription": "WaveSpeed Mobile - 移动端 AI 工具",
-      "mobileAboutText": "一个用于运行 WaveSpeed API AI 模型的开源移动应用程序。"
+      "mobileDescription": "Lovarts Mobile - 移动端 AI 工具",
+      "mobileAboutText": "一个用于运行 Lovarts API AI 模型的开源移动应用程序。"
     }
   },
   "apiKeyRequired": {
     "title": "需要 API 密钥",
-    "defaultDesc": "请在设置中配置您的 WaveSpeed API 密钥。",
+    "defaultDesc": "请在设置中配置您的 Lovarts API 密钥。",
     "goToSettings": "前往设置",
     "orGoTo": "或前往"
   },
@@ -1857,7 +1857,7 @@
       },
       "nodePalette": {
         "title": "节点分类",
-        "desc": "节点分为 5 个类别：\n• AI 模型 — 运行任意 WaveSpeed AI 模型\n• 输入 — 上传媒体文件或输入文本\n• 输出 — 导出文件或预览结果\n• 处理 — 拼接或选择输出结果\n• 免费工具 — 12 个内置工具（背景移除、人脸增强、格式转换等）\n\n拖拽节点到画布或点击即可添加。"
+        "desc": "节点分为 5 个类别：\n• AI 模型 — 运行任意 Lovarts AI 模型\n• 输入 — 上传媒体文件或输入文本\n• 输出 — 导出文件或预览结果\n• 处理 — 拼接或选择输出结果\n• 免费工具 — 12 个内置工具（背景移除、人脸增强、格式转换等）\n\n拖拽节点到画布或点击即可添加。"
       },
       "aiTask": {
         "title": "图片生成器节点",
