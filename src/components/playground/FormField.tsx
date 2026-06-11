@@ -198,6 +198,7 @@ function getDisplayOption(field: FormFieldConfig, option: string) {
     high: "高",
     hd: "高清",
     standard: "标准",
+    detailed: "详细",
     pro: "专业",
     ultra: "超高",
     fast: "快速",
@@ -219,6 +220,22 @@ function getDisplayOption(field: FormFieldConfig, option: string) {
     video: "视频",
     audio: "音频",
     text: "文本",
+    pbr: "PBR 材质",
+    all: "完整材质",
+    shaded: "着色材质",
+    original_image: "按原图",
+    geometry: "按几何结构",
+    default: "默认朝向",
+    align_image: "对齐图片",
+    quad: "四边面",
+    triangle: "三角面",
+    realistic: "写实",
+    sculpture: "雕塑",
+    off: "关闭",
+    on: "开启",
+    white_mesh: "白模",
+    textured_mesh: "带纹理模型",
+    low_poly: "低多边形",
     portrait: "竖版",
     landscape: "横版",
     square: "方形",
@@ -748,6 +765,26 @@ export function FormField({
       }
 
       case "boolean":
+        if (compact) {
+          return (
+            <div className="flex h-8 items-center justify-between gap-3">
+              <Label
+                htmlFor={field.name}
+                className="min-w-0 truncate text-xs font-medium leading-none text-[#d1d5db]"
+              >
+                {field.label}
+              </Label>
+              <Switch
+                id={field.name}
+                checked={Boolean(value)}
+                onCheckedChange={onChange}
+                disabled={disabled}
+                className="h-5 w-9 border-0 data-[state=checked]:bg-[#d4ff00] data-[state=unchecked]:bg-white/[0.12] [&>span]:h-4 [&>span]:w-4 [&>span]:bg-[#0b0b0b] [&>span[data-state=checked]]:translate-x-4"
+              />
+            </div>
+          );
+        }
+
         return (
           <div className="flex items-center space-x-2">
             <Switch
@@ -951,10 +988,11 @@ export function FormField({
   // Check if this is a prompt field that can be optimized (only main "prompt", not negative_prompt)
   const isOptimizablePrompt =
     field.name === "prompt" && field.type === "textarea";
+  const rendersOwnCompactLabel = compact && field.type === "boolean";
 
   return (
     <div className={cn("space-y-2", className)}>
-      {!hideLabel && (
+      {!hideLabel && !rendersOwnCompactLabel && (
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center">
             {handleAnchor}

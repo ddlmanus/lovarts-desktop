@@ -6,7 +6,7 @@ import { app } from "electron";
 import { join } from "path";
 import { existsSync, readFileSync } from "fs";
 
-const DEFAULT_API_BASE_URL = "https://api.wavespeed.ai";
+const DEFAULT_API_BASE_URL = "https://lovarts.art";
 
 function normalizeBaseUrl(value?: string | null): string {
   return String(value || "")
@@ -27,10 +27,14 @@ function loadDesktopApiSettings(): { apiKey: string; apiBaseUrl: string } {
     const settingsPath = join(userDataPath, "settings.json");
     if (existsSync(settingsPath)) {
       const data = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      const storedApiBaseUrl = normalizeBaseUrl(data.apiBaseUrl);
+      const customApiBaseUrl = normalizeBaseUrl(data.customApiBaseUrl);
       const apiBaseUrl =
-        normalizeBaseUrl(data.apiBaseUrl) ||
-        normalizeBaseUrl(data.customApiBaseUrl) ||
-        DEFAULT_API_BASE_URL;
+        data.apiServiceId === "custom"
+          ? customApiBaseUrl || storedApiBaseUrl || DEFAULT_API_BASE_URL
+          : storedApiBaseUrl === "https://api.wavespeed.ai"
+            ? DEFAULT_API_BASE_URL
+            : storedApiBaseUrl || DEFAULT_API_BASE_URL;
       if (data.apiKey) {
         _apiKey = data.apiKey;
         _apiBaseUrl = apiBaseUrl;
@@ -43,9 +47,7 @@ function loadDesktopApiSettings(): { apiKey: string; apiBaseUrl: string } {
       error,
     );
   }
-  throw new Error(
-    "WaveSpeed API key not configured. Go to Settings to add it.",
-  );
+  throw new Error("Lovarts API key not configured. Go to Settings to add it.");
 }
 
 /**

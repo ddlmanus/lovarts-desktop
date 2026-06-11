@@ -6,6 +6,7 @@ dist/
 dist-electron/
 dist-web/
 out/
+.sql
 release/
 
 # Electron

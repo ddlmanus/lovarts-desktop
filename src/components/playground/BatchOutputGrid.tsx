@@ -17,6 +17,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { AudioPlayer } from "@/components/shared/AudioPlayer";
+import { Model3DViewer } from "@/components/shared/Model3DViewer";
 import {
   useAssetsStore,
   detectAssetType,
@@ -25,6 +26,14 @@ import {
 import { storeSavedPredictionIds } from "@/stores/playgroundStore";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
+import {
+  extractOutputUrl,
+  is3DUrl,
+  isAudioUrl,
+  isImageUrl,
+  isUrl,
+  isVideoUrl,
+} from "@/lib/mediaUtils";
 import type { BatchResult, BatchQueueItem } from "@/types/batch";
 
 // Check if running in Capacitor native environment
@@ -99,60 +108,6 @@ interface BatchOutputGridProps {
   queue?: BatchQueueItem[];
 }
 
-function isUrl(str: string): boolean {
-  return str.startsWith("http://") || str.startsWith("https://");
-}
-
-function getUrlExtension(url: string): string | null {
-  try {
-    // For custom protocols like local-asset://, new URL() misparses the path as hostname.
-    // Decode and use regex fallback for these.
-    if (/^local-asset:\/\//i.test(url)) {
-      const decoded = decodeURIComponent(url);
-      const match = decoded.match(/\.([a-z0-9]+)(?:\?.*)?$/i);
-      return match ? match[1].toLowerCase() : null;
-    }
-    // Parse URL and get pathname (ignoring query params)
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname.toLowerCase();
-    // Get the last segment and extract extension
-    const lastSegment = pathname.split("/").pop() || "";
-    const match = lastSegment.match(/\.([a-z0-9]+)$/);
-    return match ? match[1] : null;
-  } catch {
-    // Fallback for invalid URLs
-    const match = url.match(/\.([a-z0-9]+)(?:\?.*)?$/i);
-    return match ? match[1].toLowerCase() : null;
-  }
-}
-
-function isImageUrl(url: string): boolean {
-  if (!isUrl(url)) return false;
-  const ext = getUrlExtension(url);
-  return (
-    ext !== null &&
-    ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(ext)
-  );
-}
-
-function isVideoUrl(url: string): boolean {
-  if (!isUrl(url)) return false;
-  const ext = getUrlExtension(url);
-  return (
-    ext !== null &&
-    ["mp4", "webm", "mov", "avi", "mkv", "ogv", "m4v"].includes(ext)
-  );
-}
-
-function isAudioUrl(url: string): boolean {
-  if (!isUrl(url)) return false;
-  const ext = getUrlExtension(url);
-  return (
-    ext !== null &&
-    ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus"].includes(ext)
-  );
-}
-
 export function BatchOutputGrid({
   results,
   modelId,
@@ -214,16 +169,17 @@ export function BatchOutputGrid({
           outputIndex++
         ) {
           const output = result.outputs[outputIndex];
-          if (typeof output !== "string") continue;
+          const outputUrl = extractOutputUrl(output);
+          if (!outputUrl) continue;
 
-          const assetType = detectAssetType(output);
+          const assetType = detectAssetType(outputUrl);
           if (!assetType) continue;
 
           try {
-            const saveResult = await saveAsset(output, assetType, {
+            const saveResult = await saveAsset(outputUrl, assetType, {
               modelId,
               predictionId: result.prediction?.id,
-              originalUrl: output,
+              originalUrl: outputUrl,
               resultIndex: outputIndex,
             });
             if (saveResult) {
@@ -337,8 +293,8 @@ export function BatchOutputGrid({
     for (const result of results) {
       if (result.error) continue;
       for (let i = 0; i < result.outputs.length; i++) {
-        const output = result.outputs[i];
-        if (typeof output === "string" && isUrl(output)) {
+        const output = extractOutputUrl(result.outputs[i]);
+        if (output && isUrl(output)) {
           downloads.push({
             url: output,
             predictionId: result.prediction?.id,
@@ -431,7 +387,7 @@ export function BatchOutputGrid({
       outputIndex: number;
       result: BatchResult | null;
       mediaUrl: string | null;
-      mediaType: "image" | "video" | "audio" | null;
+      mediaType: "image" | "video" | "audio" | "3d" | null;
       isPending: boolean;
       hasError: boolean;
       seed?: unknown;
@@ -471,27 +427,27 @@ export function BatchOutputGrid({
       } else {
         let mediaCount = 0;
         for (let oi = 0; oi < result.outputs.length; oi++) {
-          const output = result.outputs[oi];
-          if (typeof output === "string") {
-            let mt: "image" | "video" | "audio" | null = null;
-            if (isImageUrl(output)) mt = "image";
-            else if (isVideoUrl(output)) mt = "video";
-            else if (isAudioUrl(output)) mt = "audio";
-            if (mt) {
-              items.push({
-                key: `r-${index}-${oi}`,
-                batchIndex: index,
-                outputIndex: oi,
-                result,
-                mediaUrl: output,
-                mediaType: mt,
-                isPending: false,
-                hasError: false,
-                seed,
-                timing: result.timing,
-              });
-              mediaCount++;
-            }
+          const output = extractOutputUrl(result.outputs[oi]);
+          if (!output) continue;
+          let mt: "image" | "video" | "audio" | "3d" | null = null;
+          if (isImageUrl(output)) mt = "image";
+          else if (isVideoUrl(output)) mt = "video";
+          else if (isAudioUrl(output)) mt = "audio";
+          else if (is3DUrl(output)) mt = "3d";
+          if (mt) {
+            items.push({
+              key: `r-${index}-${oi}`,
+              batchIndex: index,
+              outputIndex: oi,
+              result,
+              mediaUrl: output,
+              mediaType: mt,
+              isPending: false,
+              hasError: false,
+              seed,
+              timing: result.timing,
+            });
+            mediaCount++;
           }
         }
         if (mediaCount === 0) {
@@ -636,6 +592,13 @@ export function BatchOutputGrid({
                   />
                 ) : item.mediaType === "audio" ? (
                   <div className="text-muted-foreground text-xs">Audio</div>
+                ) : item.mediaType === "3d" ? (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_50%_20%,#2b2b31_0%,#151515_52%,#080808_100%)] text-xs text-white/80">
+                    <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1">
+                      3D 模型
+                    </span>
+                    <span className="text-white/50">点击预览</span>
+                  </div>
                 ) : (
                   <div className="text-muted-foreground text-xs">Output</div>
                 )}
@@ -733,12 +696,17 @@ export function BatchOutputGrid({
                 {selectedResult.outputs.map((output, outputIndex) => {
                   const isObject =
                     typeof output === "object" && output !== null;
-                  const outputStr = isObject
-                    ? JSON.stringify(output, null, 2)
-                    : String(output);
-                  const isImage = !isObject && isImageUrl(outputStr);
-                  const isVideo = !isObject && isVideoUrl(outputStr);
-                  const isAudio = !isObject && isAudioUrl(outputStr);
+                  const outputUrl = extractOutputUrl(output);
+                  const outputStr =
+                    outputUrl ||
+                    (isObject
+                      ? JSON.stringify(output, null, 2)
+                      : String(output));
+                  const isMediaObject = !!outputUrl;
+                  const isImage = isImageUrl(outputStr);
+                  const isVideo = isVideoUrl(outputStr);
+                  const isAudio = isAudioUrl(outputStr);
+                  const is3D = is3DUrl(outputStr);
 
                   return (
                     <div key={outputIndex} className="space-y-2">
@@ -761,18 +729,31 @@ export function BatchOutputGrid({
                           />
                         )}
                         {isAudio && <AudioPlayer src={outputStr} />}
-                        {isObject && (
+                        {is3D && (
+                          <div className="h-[560px] max-h-[70vh] overflow-hidden rounded-lg bg-black">
+                            <Model3DViewer
+                              src={outputStr}
+                              rounded
+                              className="h-full w-full"
+                            />
+                          </div>
+                        )}
+                        {isObject && !isMediaObject && (
                           <pre className="p-4 bg-muted rounded-lg text-sm overflow-auto max-h-96">
                             {outputStr}
                           </pre>
                         )}
-                        {!isImage && !isVideo && !isAudio && !isObject && (
-                          <p className="text-sm break-all">{outputStr}</p>
-                        )}
+                        {!isImage &&
+                          !isVideo &&
+                          !isAudio &&
+                          !is3D &&
+                          !isObject && (
+                            <p className="text-sm break-all">{outputStr}</p>
+                          )}
                       </div>
 
                       {/* Actions - always visible below content */}
-                      {!isObject && (
+                      {(!isObject || isMediaObject) && (
                         <div className="flex items-center gap-2">
                           <Button
                             size="sm"

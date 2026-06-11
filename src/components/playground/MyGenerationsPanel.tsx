@@ -1,9 +1,17 @@
 import type { GenerationHistoryItem, HistoryItem } from "@/types/prediction";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { isImageUrl, isVideoUrl } from "@/lib/mediaUtils";
+import {
+  extractOutputUrl,
+  is3DUrl,
+  isAudioUrl,
+  isImageUrl,
+  isVideoUrl,
+} from "@/lib/mediaUtils";
 import { cn } from "@/lib/utils";
 import { queueCanvasImport } from "@/workflow/lib/pendingCanvasImport";
+import { AudioPlayer } from "@/components/shared/AudioPlayer";
+import { Model3DViewer } from "@/components/shared/Model3DViewer";
 import {
   Dialog,
   DialogContent,
@@ -12,10 +20,12 @@ import {
 } from "@/components/ui/dialog";
 import {
   AlertCircle,
+  Box,
   Download,
   FileText,
   Import as ImportIcon,
   Loader2,
+  Maximize2,
   RefreshCw,
   Trash2,
 } from "lucide-react";
@@ -27,7 +37,7 @@ type GenerationCard = {
   createdAt: number;
   outputs: (string | Record<string, unknown>)[];
   thumbnailUrl: string | null;
-  thumbnailType: "image" | "video" | null;
+  thumbnailType: "image" | "video" | "audio" | "3d" | null;
   error?: string | null;
   source: "local" | "remote";
   predictionId?: string | null;
@@ -35,7 +45,7 @@ type GenerationCard = {
 
 type GenerationPreview = {
   url: string;
-  type: "image" | "video";
+  type: "image" | "video" | "3d";
   model: string;
   createdAt: number;
 };
@@ -50,29 +60,42 @@ interface MyGenerationsPanelProps {
   onDelete?: (item: GenerationCard) => void | Promise<void>;
 }
 
-function extractUrl(output: unknown): string | null {
-  if (typeof output === "string") return output;
-  if (!output || typeof output !== "object") return null;
-  const record = output as Record<string, unknown>;
-  const value =
-    record.url ||
-    record.download_url ||
-    record.file_url ||
-    record.image_url ||
-    record.video_url;
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 function getFirstMedia(
   outputs: (string | Record<string, unknown>)[] | undefined,
+  model?: string,
 ) {
   for (const output of outputs || []) {
-    const url = extractUrl(output);
+    const url = extractOutputUrl(output);
     if (!url) continue;
     if (isImageUrl(url)) return { url, type: "image" as const };
     if (isVideoUrl(url)) return { url, type: "video" as const };
+    if (is3DUrl(url)) return { url, type: "3d" as const };
+    if (
+      isAudioUrl(url) ||
+      outputLooksLikeAudio(output) ||
+      modelLooksLikeAudio(model)
+    ) {
+      return { url, type: "audio" as const };
+    }
   }
   return null;
+}
+
+function outputLooksLikeAudio(output: string | Record<string, unknown>) {
+  if (typeof output === "string") return isAudioUrl(output);
+  const keys = Object.keys(output).map((key) => key.toLowerCase());
+  if (keys.some((key) => key.includes("audio") || key.includes("sound"))) {
+    return true;
+  }
+  const contentType = String(
+    output.content_type ?? output.contentType ?? output.mime_type ?? "",
+  ).toLowerCase();
+  return contentType.startsWith("audio/");
+}
+
+function modelLooksLikeAudio(model: string | undefined) {
+  if (!model) return false;
+  return /audio|music|speech|voice|tts|sound/i.test(model);
 }
 
 function formatDate(value: number) {
@@ -95,10 +118,11 @@ function getFileNameFromUrl(url: string, model?: string) {
 }
 
 function toLocalCard(item: GenerationHistoryItem): GenerationCard {
-  const media = getFirstMedia(item.outputs);
+  const model = item.modelId || item.prediction.model;
+  const media = getFirstMedia(item.outputs, model);
   return {
     id: item.id,
-    model: item.modelId || item.prediction.model,
+    model,
     status: item.status || item.prediction.status,
     createdAt: item.addedAt,
     outputs: item.outputs,
@@ -111,7 +135,7 @@ function toLocalCard(item: GenerationHistoryItem): GenerationCard {
 }
 
 function toRemoteCard(item: HistoryItem): GenerationCard {
-  const media = getFirstMedia(item.outputs);
+  const media = getFirstMedia(item.outputs, item.model);
   const createdAt = new Date(item.created_at).getTime();
   return {
     id: item.id,
@@ -156,10 +180,12 @@ function GenerationCardView({
 }) {
   const isRunning = isRunningStatus(item.status);
   const isFailed = item.status === "failed";
-  const firstUrl = item.thumbnailUrl || extractUrl(item.outputs[0]);
+  const firstUrl = item.thumbnailUrl || extractOutputUrl(item.outputs[0]);
   const canPreview =
     !!item.thumbnailUrl &&
-    (item.thumbnailType === "image" || item.thumbnailType === "video") &&
+    (item.thumbnailType === "image" ||
+      item.thumbnailType === "video" ||
+      item.thumbnailType === "3d") &&
     !isRunning &&
     !isFailed;
 
@@ -232,6 +258,35 @@ function GenerationCardView({
               playsInline
             />
           </div>
+        ) : item.thumbnailUrl && item.thumbnailType === "audio" ? (
+          <div className="flex w-full items-center justify-center px-5">
+            <div
+              className="w-full max-w-2xl rounded-full border border-white/[0.08] bg-[#252a32] px-4 py-3"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <AudioPlayer
+                src={item.thumbnailUrl}
+                compact
+                className="text-white"
+              />
+            </div>
+          </div>
+        ) : item.thumbnailUrl && item.thumbnailType === "3d" ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_20%,#2c2c30_0%,#171717_48%,#0b0b0b_100%)] px-6 text-center">
+            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] text-white shadow-lg">
+              <Box className="h-7 w-7" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-white">
+                点击查看 3D 模型
+              </p>
+              <p className="mt-1 text-xs text-[#8f96a3]">可旋转、缩放预览</p>
+            </div>
+            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-xs font-medium text-white/80">
+              <Maximize2 className="h-3 w-3" />
+              预览
+            </span>
+          </div>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <FileText className="h-10 w-10 text-[#7b8190]" />
@@ -272,17 +327,20 @@ function GenerationCardView({
               >
                 <Download className="h-3.5 w-3.5" />
               </a>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpenInCanvas(item, firstUrl);
-                }}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#9ca3af] hover:bg-white/8 hover:text-white"
-                title="导入画布"
-              >
-                <ImportIcon className="h-3.5 w-3.5" />
-              </button>
+              {item.thumbnailType !== "audio" &&
+                item.thumbnailType !== "3d" && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenInCanvas(item, firstUrl);
+                    }}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#9ca3af] hover:bg-white/8 hover:text-white"
+                    title="导入画布"
+                  >
+                    <ImportIcon className="h-3.5 w-3.5" />
+                  </button>
+                )}
             </>
           )}
           {onDelete && (
@@ -365,7 +423,7 @@ export function MyGenerationsPanel({
       await onDelete(item);
       if (
         preview?.url &&
-        item.outputs.some((output) => extractUrl(output) === preview.url)
+        item.outputs.some((output) => extractOutputUrl(output) === preview.url)
       ) {
         setPreview(null);
       }
@@ -376,7 +434,11 @@ export function MyGenerationsPanel({
 
   const handleOpenInCanvas = (item: GenerationCard, url: string) => {
     const mediaType =
-      item.thumbnailType || (isVideoUrl(url) ? "video" : "image");
+      item.thumbnailType === "audio"
+        ? "audio"
+        : item.thumbnailType === "video" || isVideoUrl(url)
+          ? "video"
+          : "image";
     queueCanvasImport({
       url,
       mediaType,
@@ -472,7 +534,7 @@ export function MyGenerationsPanel({
                     alt={preview.model}
                     className="max-h-full max-w-full object-contain"
                   />
-                ) : (
+                ) : preview.type === "video" ? (
                   <video
                     src={preview.url}
                     className="max-h-full max-w-full object-contain"
@@ -480,6 +542,12 @@ export function MyGenerationsPanel({
                     autoPlay
                     loop
                     playsInline
+                  />
+                ) : (
+                  <Model3DViewer
+                    src={preview.url}
+                    rounded={false}
+                    className="h-full w-full"
                   />
                 )}
               </div>
@@ -501,28 +569,30 @@ export function MyGenerationsPanel({
                   <Download className="h-4 w-4" />
                   下载
                 </a>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleOpenInCanvas(
-                      {
-                        id: preview.url,
-                        model: preview.model,
-                        status: "completed",
-                        createdAt: preview.createdAt,
-                        outputs: [preview.url],
-                        thumbnailUrl: preview.url,
-                        thumbnailType: preview.type,
-                        source: "local",
-                      },
-                      preview.url,
-                    )
-                  }
-                  className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-[#d1d5db] hover:bg-white/8 hover:text-white"
-                >
-                  <ImportIcon className="h-4 w-4" />
-                  打开
-                </button>
+                {preview.type !== "3d" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenInCanvas(
+                        {
+                          id: preview.url,
+                          model: preview.model,
+                          status: "completed",
+                          createdAt: preview.createdAt,
+                          outputs: [preview.url],
+                          thumbnailUrl: preview.url,
+                          thumbnailType: preview.type,
+                          source: "local",
+                        },
+                        preview.url,
+                      )
+                    }
+                    className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-[#d1d5db] hover:bg-white/8 hover:text-white"
+                  >
+                    <ImportIcon className="h-4 w-4" />
+                    打开
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setPreview(null)}

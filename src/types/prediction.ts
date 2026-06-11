@@ -50,7 +50,7 @@ export interface GenerationHistoryItem {
   formValues?: Record<string, unknown>;
   addedAt: number;
   thumbnailUrl: string | null;
-  thumbnailType: "image" | "video" | null;
+  thumbnailType: "image" | "video" | "audio" | "3d" | null;
   status?: PredictionResult["status"];
   error?: string | null;
   modelId?: string;

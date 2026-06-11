@@ -10,7 +10,7 @@ export interface SmartFormFamily {
   name: string;
   provider: string;
   poster: string;
-  category: "image" | "video" | "other";
+  category: "image" | "video" | "audio" | "3d" | "other";
   variantIds: string[];
   primaryVariant: string;
   toggles: SmartFormToggle[];
@@ -103,6 +103,55 @@ function hasLorasFilled(filledFields: Set<string>): boolean {
 }
 
 export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
+  {
+    id: "qwen3-tts",
+    name: "Qwen3 TTS",
+    provider: "wavespeed-ai",
+    poster:
+      "https://static.wavespeed.ai/media/images/1763649945119973876_WvMIEAxu.jpg",
+    category: "audio",
+    variantIds: [
+      "wavespeed-ai/qwen3-tts/text-to-speech",
+      "wavespeed-ai/qwen3-tts/voice-clone",
+      "wavespeed-ai/qwen3-tts/voice-design",
+      "wavespeed-ai/qwen3-tts",
+      "qwen3-tts/text-to-speech",
+      "qwen3-tts/voice-clone",
+      "qwen3-tts/voice-design",
+    ],
+    primaryVariant: "wavespeed-ai/qwen3-tts/text-to-speech",
+    toggles: [
+      {
+        key: "mode",
+        labelKey: "smartPlayground.toggleMode",
+        options: [
+          {
+            value: "text",
+            labelKey: "smartPlayground.modeTextToSpeech",
+          },
+          {
+            value: "clone",
+            labelKey: "smartPlayground.modeVoiceClone",
+          },
+          {
+            value: "design",
+            labelKey: "smartPlayground.modeVoiceDesign",
+          },
+        ],
+        default: "text",
+      },
+    ],
+    resolveVariant(filledFields, toggleValues) {
+      if (toggleValues.mode === "design") {
+        return "wavespeed-ai/qwen3-tts/voice-design";
+      }
+      if (toggleValues.mode === "clone" || hasAudioFilled(filledFields)) {
+        return "wavespeed-ai/qwen3-tts/voice-clone";
+      }
+      return "wavespeed-ai/qwen3-tts/text-to-speech";
+    },
+  },
+
   {
     id: "gpt-image-2",
     name: "GPT Image 2",

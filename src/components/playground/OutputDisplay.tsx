@@ -27,8 +27,15 @@ import {
   FolderHeart,
   Loader2,
 } from "lucide-react";
-import { isImageUrl, isVideoUrl, isAudioUrl } from "@/lib/mediaUtils";
+import {
+  extractOutputUrl,
+  is3DUrl,
+  isImageUrl,
+  isVideoUrl,
+  isAudioUrl,
+} from "@/lib/mediaUtils";
 import { AudioPlayer } from "@/components/shared/AudioPlayer";
+import { Model3DViewer } from "@/components/shared/Model3DViewer";
 import { FlappyBird } from "./FlappyBird";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
@@ -142,10 +149,11 @@ export function OutputDisplay({
   const mediaOutputs = useMemo(() => {
     return outputs
       .map((output, index) => {
-        if (typeof output !== "string") return null;
-        const str = String(output);
+        const str = extractOutputUrl(output);
+        if (!str) return null;
         if (isImageUrl(str)) return { index, url: str, type: "image" as const };
         if (isVideoUrl(str)) return { index, url: str, type: "video" as const };
+        if (is3DUrl(str)) return { index, url: str, type: "3d" as const };
         return null;
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -247,7 +255,7 @@ export function OutputDisplay({
     ) {
       // Mark all outputs as saved so the UI shows the correct state
       for (let i = 0; i < outputs.length; i++) {
-        const output = outputs[i];
+        const output = extractOutputUrl(outputs[i]);
         if (typeof output === "string" && detectAssetType(output)) {
           setSavedIndexes((prev) => new Set(prev).add(i));
         }
@@ -258,8 +266,8 @@ export function OutputDisplay({
     // Find outputs not yet auto-saved
     const unsaved: { output: string; index: number }[] = [];
     for (let i = 0; i < outputs.length; i++) {
-      const output = outputs[i];
-      if (typeof output !== "string") continue;
+      const output = extractOutputUrl(outputs[i]);
+      if (!output) continue;
       if (output.startsWith("local-asset://")) continue;
       if (autoSavedUrlsRef.current.has(output)) continue;
       const assetType = detectAssetType(output);
@@ -562,12 +570,15 @@ export function OutputDisplay({
       >
         {outputs.map((output, index) => {
           const isObject = typeof output === "object" && output !== null;
-          const outputStr = isObject
-            ? JSON.stringify(output, null, 2)
-            : String(output);
-          const isImage = !isObject && isImageUrl(outputStr);
-          const isVideo = !isObject && isVideoUrl(outputStr);
-          const isAudio = !isObject && isAudioUrl(outputStr);
+          const outputUrl = extractOutputUrl(output);
+          const outputStr =
+            outputUrl ||
+            (isObject ? JSON.stringify(output, null, 2) : String(output));
+          const isMediaObject = !!outputUrl;
+          const isImage = isImageUrl(outputStr);
+          const isVideo = isVideoUrl(outputStr);
+          const isAudio = isAudioUrl(outputStr);
+          const is3D = is3DUrl(outputStr);
           const copyValue = isObject ? outputStr : outputStr;
 
           // Multi-output: BatchOutputGrid-style card with thumbnail + footer
@@ -607,7 +618,15 @@ export function OutputDisplay({
                   {isAudio && (
                     <div className="text-muted-foreground text-xs">Audio</div>
                   )}
-                  {!isImage && !isVideo && !isAudio && (
+                  {is3D && (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_50%_20%,#2b2b31_0%,#151515_52%,#080808_100%)] text-xs text-white/80">
+                      <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1">
+                        3D 模型
+                      </span>
+                      <span className="text-white/50">点击预览</span>
+                    </div>
+                  )}
+                  {!isImage && !isVideo && !isAudio && !is3D && (
                     <div className="text-muted-foreground text-xs">Output</div>
                   )}
                 </div>
@@ -700,7 +719,22 @@ export function OutputDisplay({
 
               {isAudio && <AudioPlayer src={outputStr} />}
 
-              {isObject && (
+              {is3D && (
+                <button
+                  type="button"
+                  className="flex h-full min-h-[360px] w-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_20%,#2b2b31_0%,#151515_52%,#080808_100%)] text-white transition-opacity hover:opacity-95"
+                  onClick={() => setFullscreenIndex(index)}
+                >
+                  <span className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-semibold">
+                    点击查看 3D 模型
+                  </span>
+                  <span className="text-xs text-white/50">
+                    可旋转、缩放预览
+                  </span>
+                </button>
+              )}
+
+              {isObject && !isMediaObject && (
                 <div className="flex items-center justify-center w-full h-full p-6 overflow-auto">
                   <div className="w-full max-w-md space-y-3">
                     {Object.entries(output as Record<string, unknown>).map(
@@ -720,7 +754,7 @@ export function OutputDisplay({
                 </div>
               )}
 
-              {!isImage && !isVideo && !isAudio && !isObject && (
+              {!isImage && !isVideo && !isAudio && !is3D && !isObject && (
                 <div className="p-4">
                   <p className="text-sm break-all">{outputStr}</p>
                 </div>
@@ -764,7 +798,7 @@ export function OutputDisplay({
                     <Copy className="h-4 w-4" />
                   )}
                 </Button>
-                {!isObject && (
+                {(!isObject || isMediaObject) && (
                   <Button
                     size="icon"
                     variant="secondary"
@@ -774,34 +808,46 @@ export function OutputDisplay({
                     <ExternalLink className="h-4 w-4" />
                   </Button>
                 )}
-                {(isImage || isVideo || isAudio) && (
+                {(isImage || isVideo || isAudio || is3D) && (
                   <>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="secondary"
-                          className="h-8 w-8 rounded-lg bg-background/90 backdrop-blur"
-                          onClick={() => handleSaveToAssets(outputStr, index)}
-                          disabled={
-                            savedIndexes.has(index) ||
-                            savingIndex === index ||
-                            !modelId
-                          }
-                        >
-                          {savedIndexes.has(index) ? (
-                            <FolderHeart className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <Save className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {savedIndexes.has(index)
-                          ? t("playground.alreadySaved")
-                          : t("playground.saveToAssets")}
-                      </TooltipContent>
-                    </Tooltip>
+                    {!is3D && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="secondary"
+                            className="h-8 w-8 rounded-lg bg-background/90 backdrop-blur"
+                            onClick={() => handleSaveToAssets(outputStr, index)}
+                            disabled={
+                              savedIndexes.has(index) ||
+                              savingIndex === index ||
+                              !modelId
+                            }
+                          >
+                            {savedIndexes.has(index) ? (
+                              <FolderHeart className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <Save className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {savedIndexes.has(index)
+                            ? t("playground.alreadySaved")
+                            : t("playground.saveToAssets")}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {is3D && (
+                      <Button
+                        size="icon"
+                        variant="secondary"
+                        className="h-8 w-8 rounded-lg bg-background/90 backdrop-blur"
+                        onClick={() => setFullscreenIndex(index)}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       size="icon"
                       variant="secondary"
@@ -913,6 +959,15 @@ export function OutputDisplay({
               autoPlay
               className="max-w-full max-h-full object-contain"
             />
+          )}
+          {fullscreenMedia?.type === "3d" && (
+            <div className="relative z-10 h-full w-full">
+              <Model3DViewer
+                src={fullscreenMedia.url}
+                rounded={false}
+                className="h-full w-full"
+              />
+            </div>
           )}
           {/* Counter */}
           {mediaOutputs.length > 1 && fullscreenMedia && (

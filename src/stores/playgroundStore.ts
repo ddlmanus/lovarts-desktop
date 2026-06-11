@@ -10,7 +10,13 @@ import { normalizePayloadArrays } from "@/lib/schemaToForm";
 import type { BatchConfig, BatchState, BatchResult } from "@/types/batch";
 import { DEFAULT_BATCH_CONFIG } from "@/types/batch";
 import { persistentStorage } from "@/lib/storage";
-import { isImageUrl, isVideoUrl } from "@/lib/mediaUtils";
+import {
+  extractOutputUrl,
+  is3DUrl,
+  isAudioUrl,
+  isImageUrl,
+  isVideoUrl,
+} from "@/lib/mediaUtils";
 import { useAssetsStore, detectAssetType } from "@/stores/assetsStore";
 
 /* ── Store-level auto-save to My Assets ───────────────────────────────── */
@@ -21,6 +27,18 @@ import { useAssetsStore, detectAssetType } from "@/stores/assetsStore";
  * to prevent duplicate saves when both fire concurrently.
  */
 export const storeSavedPredictionIds = new Set<string>();
+
+type GenerationThumbnailType = NonNullable<
+  GenerationHistoryItem["thumbnailType"]
+>;
+
+function classifyMediaUrl(url: string): GenerationThumbnailType | null {
+  if (isImageUrl(url)) return "image";
+  if (isVideoUrl(url)) return "video";
+  if (isAudioUrl(url)) return "audio";
+  if (is3DUrl(url)) return "3d";
+  return null;
+}
 
 /**
  * Auto-save prediction outputs to My Assets from the store layer.
@@ -47,8 +65,8 @@ function autoSaveToAssets(
 
   const unsaved: { output: string; index: number }[] = [];
   for (let i = 0; i < outputs.length; i++) {
-    const output = outputs[i];
-    if (typeof output !== "string") continue;
+    const output = extractOutputUrl(outputs[i]);
+    if (!output) continue;
     if (output.startsWith("local-asset://")) continue;
     const assetType = detectAssetType(output);
     if (!assetType) continue;
@@ -511,19 +529,24 @@ function createHistoryItemsFromOutputs(params: {
   outputs: (string | Record<string, unknown>)[];
   formValues: Record<string, unknown>;
   modelId: string;
+  replacementId?: string | null;
 }): GenerationHistoryItem[] {
-  const { prediction, outputs, formValues, modelId } = params;
-  const mediaEntries: { output: string; type: "image" | "video" }[] = [];
+  const { prediction, outputs, formValues, modelId, replacementId } = params;
+  const mediaEntries: {
+    output: string;
+    type: GenerationThumbnailType;
+  }[] = [];
   for (const output of outputs) {
-    if (typeof output !== "string") continue;
-    if (isImageUrl(output)) mediaEntries.push({ output, type: "image" });
-    else if (isVideoUrl(output)) mediaEntries.push({ output, type: "video" });
+    const url = extractOutputUrl(output);
+    if (!url) continue;
+    const type = classifyMediaUrl(url);
+    if (type) mediaEntries.push({ output: url, type });
   }
 
   if (mediaEntries.length >= 2) {
-    const baseId = prediction.id || `gen-${Date.now()}`;
+    const baseId = replacementId || prediction.id || `gen-${Date.now()}`;
     return mediaEntries.map(({ output, type }, index) => ({
-      id: `${baseId}-${index}`,
+      id: index === 0 ? baseId : `${baseId}-${index}`,
       prediction,
       outputs: [output],
       formValues: { ...formValues },
@@ -540,7 +563,7 @@ function createHistoryItemsFromOutputs(params: {
   const thumbnailType = mediaEntries[0]?.type ?? null;
   return [
     {
-      id: prediction.id || `gen-${Date.now()}`,
+      id: replacementId || prediction.id || `gen-${Date.now()}`,
       prediction,
       outputs,
       formValues: { ...formValues },
@@ -930,30 +953,23 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         },
       );
 
-      // Normalize outputs: some models return [{ url: "..." }] instead of ["..."]
+      // Normalize outputs: Lovarts/WaveSpeed may return URL strings or objects.
       const rawOutputs = result.outputs || [];
       const outputs: (string | Record<string, unknown>)[] = rawOutputs.map(
-        (o) => {
-          if (
-            typeof o === "object" &&
-            o !== null &&
-            typeof (o as { url?: string }).url === "string"
-          ) {
-            return (o as { url: string }).url;
-          }
-          return o;
-        },
+        (o) => extractOutputUrl(o) ?? o,
       );
 
       // Build history items — split multi-media outputs into individual entries
       const historyItems: GenerationHistoryItem[] = [];
 
-      const mediaEntries: { output: string; type: "image" | "video" }[] = [];
+      const mediaEntries: {
+        output: string;
+        type: GenerationThumbnailType;
+      }[] = [];
       for (const output of outputs) {
         if (typeof output === "string") {
-          if (isImageUrl(output)) mediaEntries.push({ output, type: "image" });
-          else if (isVideoUrl(output))
-            mediaEntries.push({ output, type: "video" });
+          const type = classifyMediaUrl(output);
+          if (type) mediaEntries.push({ output, type });
         }
       }
 
@@ -962,11 +978,11 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
       if (mediaEntries.length >= 2) {
         // Split: one history item per media output (newest/first at index 0)
-        const baseId = result.id || `gen-${Date.now()}`;
+        const baseId = pendingId || result.id || `gen-${Date.now()}`;
         for (let i = 0; i < mediaEntries.length; i++) {
           const { output, type } = mediaEntries[i];
           historyItems.push({
-            id: `${baseId}-${i}`,
+            id: i === 0 ? baseId : `${baseId}-${i}`,
             prediction: result,
             outputs: [output],
             formValues: snapshotValues,
@@ -983,7 +999,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         const thumbnailUrl = mediaEntries[0]?.output ?? null;
         const thumbnailType = mediaEntries[0]?.type ?? null;
         historyItems.push({
-          id: result.id || `gen-${Date.now()}`,
+          id: pendingId || result.id || `gen-${Date.now()}`,
           prediction: result,
           outputs,
           formValues: snapshotValues,
@@ -1145,6 +1161,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       outputs,
       formValues,
       modelId,
+      replacementId: pendingId,
     });
 
     set((state) => ({
@@ -1412,19 +1429,10 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         );
         const timing = Date.now() - startTime;
 
-        // Normalize outputs: some models return [{ url: "..." }] instead of ["..."]
+        // Normalize outputs: Lovarts/WaveSpeed may return URL strings or objects.
         const batchOutputs: (string | Record<string, unknown>)[] = (
           result.outputs || []
-        ).map((o) => {
-          if (
-            typeof o === "object" &&
-            o !== null &&
-            typeof (o as { url?: string }).url === "string"
-          ) {
-            return (o as { url: string }).url;
-          }
-          return o;
-        });
+        ).map((o) => extractOutputUrl(o) ?? o);
 
         results[i] = {
           id: result.id || pendingIds[i] || queue[i].id,
@@ -1440,14 +1448,12 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         const itemHistoryEntries: GenerationHistoryItem[] = [];
         for (const output of batchOutputs) {
           if (typeof output === "string") {
-            const mType = isImageUrl(output)
-              ? ("image" as const)
-              : isVideoUrl(output)
-                ? ("video" as const)
-                : null;
+            const mType = classifyMediaUrl(output);
             if (mType) {
+              const baseId = result.id || pendingIds[i] || queue[i].id;
+              const entryIndex = itemHistoryEntries.length;
               itemHistoryEntries.push({
-                id: `${result.id || pendingIds[i] || queue[i].id}-${itemHistoryEntries.length}`,
+                id: entryIndex === 0 ? baseId : `${baseId}-${entryIndex}`,
                 prediction: result,
                 outputs: [output],
                 formValues: batchSnapshotValues,

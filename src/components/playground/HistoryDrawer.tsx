@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { GenerationHistoryItem } from "@/types/prediction";
 import { cn } from "@/lib/utils";
 import {
+  Box,
   ChevronUp,
   ChevronDown,
   ChevronLeft,
@@ -28,6 +29,14 @@ interface HistoryDrawerProps {
 
 function ThumbnailContent({ item }: { item: GenerationHistoryItem }) {
   if (item.thumbnailUrl) {
+    if (item.thumbnailType === "3d") {
+      return (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[#151515] text-[10px] text-white/70">
+          <Box className="h-4 w-4" />
+          <span>3D 模型</span>
+        </div>
+      );
+    }
     if (item.thumbnailType === "video") {
       return (
         <video

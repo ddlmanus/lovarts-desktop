@@ -33,6 +33,42 @@ function getSettingsFieldSlot(field: FormFieldConfig) {
   const label = field.label.toLowerCase();
   const haystack = `${name} ${label}`;
 
+  const compact3DSettingNames = new Set([
+    "texture_quality",
+    "geometry_quality",
+    "texture_alignment",
+    "orientation",
+    "generate_type",
+    "polygon_type",
+    "topology",
+    "material",
+    "geometry_file_format",
+    "quality_and_mesh",
+    "tier",
+    "addons",
+    "geometry_instruct_mode",
+    "texture_mode",
+    "hd_texture",
+    "texture_delight",
+    "texture",
+    "pbr",
+    "enable_pbr",
+    "quad",
+    "auto_size",
+    "ta_pose",
+    "should_remesh",
+    "should_texture",
+    "enable_prompt_expansion",
+    "use_original_alpha",
+    "preview_render",
+    "is_micro",
+    "is_symmetric",
+  ]);
+
+  if (compact3DSettingNames.has(name)) {
+    return "compact";
+  }
+
   if (
     haystack.includes("aspect_ratio") ||
     haystack.includes("aspect ratio") ||
@@ -58,6 +94,40 @@ function getSettingsFieldLabel(field: FormFieldConfig) {
   const name = field.name.toLowerCase();
   const label = field.label.toLowerCase();
   const haystack = `${name} ${label}`;
+
+  const fixedLabels: Record<string, string> = {
+    texture_quality: "纹理质量",
+    geometry_quality: "几何质量",
+    texture_alignment: "纹理对齐",
+    orientation: "模型朝向",
+    generate_type: "生成类型",
+    polygon_type: "面片类型",
+    topology: "拓扑类型",
+    material: "材质类型",
+    geometry_file_format: "模型格式",
+    quality_and_mesh: "质量与网格",
+    tier: "生成档位",
+    addons: "高清扩展包",
+    geometry_instruct_mode: "几何指令模式",
+    texture_mode: "纹理模式",
+    hd_texture: "高清纹理",
+    texture_delight: "去光照纹理",
+    texture: "生成纹理",
+    pbr: "PBR 材质",
+    enable_pbr: "PBR 材质",
+    quad: "四边面网格",
+    auto_size: "自动尺寸",
+    ta_pose: "T/A 姿态",
+    should_remesh: "重新拓扑",
+    should_texture: "生成纹理",
+    enable_prompt_expansion: "扩展提示词",
+    use_original_alpha: "使用透明通道",
+    preview_render: "生成预览图",
+    is_micro: "微型模型",
+    is_symmetric: "对称模型",
+  };
+
+  if (fixedLabels[name]) return fixedLabels[name];
 
   if (
     haystack.includes("aspect_ratio") ||
@@ -356,7 +426,7 @@ export function DynamicForm({
           ))}
 
           {settingsCompactFields.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {settingsCompactFields.map((field) => (
                 <div key={field.name} className="min-w-0 space-y-1.5">
                   <FormField

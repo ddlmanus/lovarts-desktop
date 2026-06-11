@@ -13,7 +13,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  DEFAULT_API_BASE_URL,
   IDEART_API_BASE_URL_STORAGE_KEY,
   IDEART_PRODUCTION_API_BASE_URL,
   apiClient,
@@ -87,11 +86,146 @@ function isImageModel(model: Model) {
   return getModelWorkspace(model) === "image";
 }
 
-function getPreferredImageModel(models: Model[]) {
-  const preferred = models.find((model) =>
-    model.model_id.toLowerCase().includes("gpt-image-2"),
+function getImageModelFamilyKey(modelId: string) {
+  const parts = modelId.split("/");
+  if (parts.length <= 2) return modelId;
+  return parts.slice(0, 2).join("/");
+}
+
+function getImageModelRequestSchema(model: Model) {
+  const apiSchemas = (model.api_schema as any)?.api_schemas as
+    | Array<{
+        type: string;
+        request_schema?: {
+          properties?: Record<string, unknown>;
+          required?: string[];
+        };
+      }>
+    | undefined;
+  const modelRunSchema = apiSchemas?.find(
+    (schema) => schema.type === "model_run",
+  )?.request_schema;
+  const componentSchema = (model.api_schema as any)?.components?.schemas
+    ?.Request as
+    | {
+        properties?: Record<string, unknown>;
+        required?: string[];
+      }
+    | undefined;
+
+  return {
+    properties: modelRunSchema?.properties ?? componentSchema?.properties ?? {},
+    required: modelRunSchema?.required ?? componentSchema?.required ?? [],
+  };
+}
+
+function isImageInputField(name: string) {
+  const normalized = name.toLowerCase();
+  return (
+    normalized === "image" ||
+    normalized === "images" ||
+    normalized === "image_url" ||
+    normalized === "image_urls" ||
+    normalized === "input_image" ||
+    normalized === "input_images" ||
+    normalized === "reference_image" ||
+    normalized === "reference_images" ||
+    normalized.endsWith("_image") ||
+    normalized.endsWith("_images") ||
+    normalized.endsWith("_image_url") ||
+    normalized.endsWith("_image_urls")
   );
+}
+
+function hasImageInput(model: Model) {
+  return Object.keys(getImageModelRequestSchema(model).properties).some(
+    isImageInputField,
+  );
+}
+
+function hasRequiredImageInput(model: Model) {
+  const { required } = getImageModelRequestSchema(model);
+  return required.some(isImageInputField);
+}
+
+function isImageEditModel(model: Model) {
+  const id = model.model_id.toLowerCase();
+  const type = String(model.type || "").toLowerCase();
+  return (
+    id.includes("/edit") ||
+    id.includes("-edit") ||
+    id.includes("image-to-image") ||
+    id.includes("img2img") ||
+    id.includes("inpaint") ||
+    type.includes("edit") ||
+    hasRequiredImageInput(model) ||
+    hasImageInput(model)
+  );
+}
+
+function isTextToImageModel(model: Model) {
+  const id = model.model_id.toLowerCase();
+  const type = String(model.type || "").toLowerCase();
+  return (
+    id.includes("text-to-image") ||
+    id.includes("text2image") ||
+    type.includes("text-to-image") ||
+    (!isImageEditModel(model) && !id.includes("/edit"))
+  );
+}
+
+function getTextModelRank(model: Model) {
+  const id = model.model_id.toLowerCase();
+  if (id.includes("text-to-image")) return 0;
+  if (!id.includes("/edit") && !id.includes("-edit")) return 1;
+  return 10;
+}
+
+function getEditModelRank(model: Model) {
+  const id = model.model_id.toLowerCase();
+  if (id.includes("/edit") || id.includes("-edit")) return 0;
+  if (hasRequiredImageInput(model)) return 1;
+  if (hasImageInput(model)) return 2;
+  return 10;
+}
+
+function getPreferredImageModel(models: Model[]) {
+  const preferred = models
+    .filter((model) => model.model_id.toLowerCase().includes("gpt-image-2"))
+    .sort((a, b) => getTextModelRank(a) - getTextModelRank(b))[0];
   return preferred ?? models[0] ?? null;
+}
+
+function resolveXiaohongshuImageModel(params: {
+  models: Model[];
+  selectedModelId: string;
+  hasReferenceImages: boolean;
+}) {
+  const selected =
+    params.models.find((model) => model.model_id === params.selectedModelId) ??
+    getPreferredImageModel(params.models);
+  if (!selected) return null;
+
+  const familyKey = getImageModelFamilyKey(selected.model_id);
+  const familyModels = params.models.filter(
+    (model) => getImageModelFamilyKey(model.model_id) === familyKey,
+  );
+  const candidates = familyModels.length > 0 ? familyModels : [selected];
+
+  if (params.hasReferenceImages) {
+    return (
+      candidates
+        .filter(isImageEditModel)
+        .sort((a, b) => getEditModelRank(a) - getEditModelRank(b))[0] ??
+      selected
+    );
+  }
+
+  return (
+    candidates
+      .filter(isTextToImageModel)
+      .sort((a, b) => getTextModelRank(a) - getTextModelRank(b))[0] ?? selected
+  );
 }
 
 function createReferenceImage(file: File): ReferenceImage {
@@ -132,9 +266,7 @@ function normalizeBaseUrl(value?: string | null) {
 
 function resolveLovartsBaseUrl() {
   const clientBaseUrl = normalizeBaseUrl(apiClient.getBaseUrl());
-  if (clientBaseUrl && clientBaseUrl !== DEFAULT_API_BASE_URL) {
-    return clientBaseUrl;
-  }
+  if (clientBaseUrl) return clientBaseUrl;
   if (typeof window !== "undefined") {
     const stored = normalizeBaseUrl(
       window.localStorage.getItem(IDEART_API_BASE_URL_STORAGE_KEY),
@@ -373,6 +505,16 @@ export function XiaohongshuGeneratorPage() {
     () => imageModels.find((model) => model.model_id === selectedImageModelId),
     [imageModels, selectedImageModelId],
   );
+  const effectiveImageModel = useMemo(
+    () =>
+      resolveXiaohongshuImageModel({
+        models: imageModels,
+        selectedModelId: selectedImageModelId,
+        hasReferenceImages: referenceImages.length > 0,
+      }),
+    [imageModels, referenceImages.length, selectedImageModelId],
+  );
+  const effectiveImageModelId = effectiveImageModel?.model_id ?? "";
   const selectedPage =
     pages.find((page) => page.index === selectedPageIndex) ?? pages[0] ?? null;
   const activeImage = generatedImages[activeOutputIndex]?.url || "";
@@ -495,6 +637,13 @@ export function XiaohongshuGeneratorPage() {
       });
       return;
     }
+    if (!effectiveImageModelId) {
+      toast({
+        title: "请选择图像模型",
+        variant: "destructive",
+      });
+      return;
+    }
     const controller = new AbortController();
     abortRef.current = controller;
     setIsGeneratingCopy(true);
@@ -502,7 +651,7 @@ export function XiaohongshuGeneratorPage() {
     try {
       const copyData = await requestLovartsXiaohongshuCopy({
         form,
-        imageModelId: selectedImageModelId,
+        imageModelId: effectiveImageModelId,
         referenceImages,
         signal: controller.signal,
       });
@@ -548,7 +697,7 @@ export function XiaohongshuGeneratorPage() {
       setIsGeneratingCopy(false);
       abortRef.current = null;
     }
-  }, [applyOutline, form, referenceImages, selectedImageModelId]);
+  }, [applyOutline, effectiveImageModelId, form, referenceImages]);
 
   const updatePageContent = useCallback(
     (index: number, content: string) => {
@@ -579,7 +728,7 @@ export function XiaohongshuGeneratorPage() {
 
   const handleGeneratePageImage = useCallback(
     async (pageIndex: number, existingController?: AbortController) => {
-      if (!selectedImageModelId) {
+      if (!effectiveImageModelId) {
         toast({
           title: "请选择图像模型",
           variant: "destructive",
@@ -597,7 +746,7 @@ export function XiaohongshuGeneratorPage() {
         pageType: page.type,
         pageContent: page.content,
         aspectRatio: form.aspectRatio,
-        imageModelId: selectedImageModelId,
+        imageModelId: effectiveImageModelId,
         referenceCount: referenceImages.length,
       });
 
@@ -634,7 +783,7 @@ export function XiaohongshuGeneratorPage() {
           imageUnderstandingText,
           promptSuggestion,
           form,
-          imageModelId: selectedImageModelId,
+          imageModelId: effectiveImageModelId,
           signal: controller.signal,
         });
         if (result.recordId) setLovartsRecordId(result.recordId);
@@ -646,7 +795,7 @@ export function XiaohongshuGeneratorPage() {
           model:
             result.image?.model ||
             result.meta?.imageModelId ||
-            selectedImageModelId,
+            effectiveImageModelId,
           provider: result.meta?.provider,
         };
         const nextImage: XiaohongshuGeneratedImage = {
@@ -710,7 +859,7 @@ export function XiaohongshuGeneratorPage() {
       lovartsRecordId,
       pages,
       referenceImages,
-      selectedImageModelId,
+      effectiveImageModelId,
     ],
   );
 
@@ -777,6 +926,7 @@ export function XiaohongshuGeneratorPage() {
                   value={selectedImageModelId}
                   onChange={setSelectedImageModelId}
                   disabled={isGeneratingAll || generatingPageIndex !== null}
+                  hideVariantSelector
                 />
               </section>
 
@@ -1068,7 +1218,9 @@ export function XiaohongshuGeneratorPage() {
                     </h2>
                     <p className="text-xs text-muted-foreground">
                       共 {pages.length} 页 ·{" "}
-                      {selectedImageModel?.model_id || "未选择图像模型"}
+                      {selectedImageModel?.name ||
+                        selectedImageModel?.model_id ||
+                        "未选择图像模型"}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

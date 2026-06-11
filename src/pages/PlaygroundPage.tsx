@@ -18,7 +18,7 @@ import {
 } from "@/stores/playgroundStore";
 import { useModelsStore } from "@/stores/modelsStore";
 import { useApiKeyStore } from "@/stores/apiKeyStore";
-import { DEFAULT_API_BASE_URL, apiClient } from "@/api/client";
+import { OFFICIAL_WAVESPEED_API_BASE_URL, apiClient } from "@/api/client";
 import { useTemplateStore } from "@/stores/templateStore";
 import { usePredictionInputsStore } from "@/stores/predictionInputsStore";
 import { useApiServiceStore } from "@/stores/apiServiceStore";
@@ -35,6 +35,7 @@ import {
   VIDEO_FIELD_NAMES,
   findFamilyByVariantId,
   getFilledFieldNames,
+  type SmartFormFamily,
 } from "@/lib/smartFormConfig";
 import {
   applyDiscount,
@@ -105,6 +106,76 @@ function getFriendlyModelName(model: Model | null | undefined): string {
   return formatModelTitle(getModelFamilyName(model.model_id));
 }
 
+function getAudioModelName(model: Model | null | undefined): string {
+  if (!model) return "";
+  const id = model.model_id.toLowerCase();
+  if (id.includes("qwen3") && (id.includes("tts") || id.includes("speech"))) {
+    return "Qwen3 TTS";
+  }
+  return formatModelTitle(getModelFamilyName(model.model_id))
+    .replace(/\bTts\b/g, "TTS")
+    .replace(/\bAi\b/g, "AI")
+    .replace(/\bApi\b/g, "API");
+}
+
+function get3DModelName(model: Model | null | undefined): string {
+  if (!model) return "";
+  const provider = model.model_id.split("/")[0]?.toLowerCase();
+  const familyName = getModelFamilyName(model.model_id);
+  const formatted = formatModelTitle(familyName)
+    .replace(/\b3d\b/gi, "3D")
+    .replace(/\bV(\d)/g, "V$1")
+    .replace(/\bH(\d)/g, "H$1");
+
+  if (provider === "tripo3d") {
+    if (familyName.toLowerCase().includes("triposplat")) return "TripoSplat";
+    return `Tripo3D ${formatted}`;
+  }
+  return formatted;
+}
+
+function getWorkspaceModelName(
+  model: Model | null | undefined,
+  workspace: PlaygroundWorkspace,
+): string {
+  if (!model) return "";
+  if (workspace === "image") return getFriendlyModelName(model);
+  if (workspace === "audio") return getAudioModelName(model);
+  if (workspace === "3d") return get3DModelName(model);
+  return model.model_id;
+}
+
+function getAudioFamilyKey(modelId: string): string {
+  const id = modelId.toLowerCase();
+  const family = getModelFamily(modelId);
+  if (
+    id.includes("qwen3") &&
+    (id.includes("tts") || id.includes("speech") || id.includes("voice"))
+  ) {
+    return "wavespeed-ai/qwen3-tts";
+  }
+  return family;
+}
+
+function get3DFamilyKey(modelId: string): string {
+  const parts = modelId.split("/");
+  const provider = parts[0] || modelId;
+  const family = parts[1] || "";
+  const variant = parts[2] || "";
+  const id = modelId.toLowerCase();
+
+  if (provider === "wavespeed-ai" && family === "hunyuan3d") {
+    if (variant.startsWith("v2")) return "wavespeed-ai/hunyuan3d/v2";
+    return `${provider}/${family}`;
+  }
+
+  if (id.startsWith("wavespeed-ai/hunyuan-3d-v3.1/")) {
+    return "wavespeed-ai/hunyuan-3d-v3.1";
+  }
+
+  return getModelFamily(modelId);
+}
+
 function extractModelFormFields(model: Model): FormFieldConfig[] {
   const apiSchemas = (model.api_schema as any)?.api_schemas as
     | Array<{
@@ -130,6 +201,660 @@ function extractModelFormFields(model: Model): FormFieldConfig[] {
     requestSchema.required || [],
     requestSchema["x-order-properties"],
   );
+}
+
+type AudioModeDefinition = {
+  value: string;
+  labelKey: string;
+  modelId: string;
+  rank: number;
+};
+
+function getAudioModeDefinition(model: Model): AudioModeDefinition {
+  const id = model.model_id.toLowerCase();
+  const fields = extractModelFormFields(model);
+  const fieldText = fields
+    .map((field) =>
+      [field.name, field.label, field.description].filter(Boolean).join(" "),
+    )
+    .join(" ")
+    .toLowerCase();
+
+  if (id.includes("voice-design") || fieldText.includes("voice_description")) {
+    return {
+      value: "voice-design",
+      labelKey: "smartPlayground.modeVoiceDesign",
+      modelId: model.model_id,
+      rank: 30,
+    };
+  }
+  if (
+    id.includes("voice-clone") ||
+    id.includes("clone") ||
+    fieldText.includes("reference_audio")
+  ) {
+    return {
+      value: "voice-clone",
+      labelKey: "smartPlayground.modeVoiceClone",
+      modelId: model.model_id,
+      rank: 20,
+    };
+  }
+  if (
+    id.includes("speech-to-speech") ||
+    id.includes("audio-to-audio") ||
+    id.includes("voice-conversion")
+  ) {
+    return {
+      value: "audio-to-audio",
+      labelKey: "smartPlayground.modeAudioToAudio",
+      modelId: model.model_id,
+      rank: 40,
+    };
+  }
+  if (id.includes("cover")) {
+    return {
+      value: "music-cover",
+      labelKey: "smartPlayground.modeMusicCover",
+      modelId: model.model_id,
+      rank: 70,
+    };
+  }
+  if (
+    id.includes("text-to-music") ||
+    id.includes("music-generation") ||
+    id.includes("music")
+  ) {
+    return {
+      value: "music",
+      labelKey: "smartPlayground.modeMusic",
+      modelId: model.model_id,
+      rank: 60,
+    };
+  }
+  if (id.includes("text-to-audio")) {
+    return {
+      value: "text-to-audio",
+      labelKey: "smartPlayground.modeTextToAudio",
+      modelId: model.model_id,
+      rank: 50,
+    };
+  }
+  return {
+    value: "text-to-speech",
+    labelKey: "smartPlayground.modeTextToSpeech",
+    modelId: model.model_id,
+    rank: 10,
+  };
+}
+
+function buildDynamicAudioSmartFamily(
+  models: Model[],
+  selectedModel: Model | null | undefined,
+): SmartFormFamily | undefined {
+  if (!selectedModel) return undefined;
+  const familyKey = getAudioFamilyKey(selectedModel.model_id);
+  const familyModels = models.filter(
+    (model) => getAudioFamilyKey(model.model_id) === familyKey,
+  );
+  if (familyModels.length === 0) return undefined;
+
+  const modeDefinitions = familyModels
+    .map(getAudioModeDefinition)
+    .sort((a, b) => a.rank - b.rank || a.modelId.localeCompare(b.modelId));
+  const modeByValue = new Map<string, AudioModeDefinition>();
+  for (const mode of modeDefinitions) {
+    if (!modeByValue.has(mode.value)) {
+      modeByValue.set(mode.value, mode);
+    }
+  }
+
+  const selectedMode = getAudioModeDefinition(selectedModel);
+  const primaryVariant =
+    modeByValue.get("text-to-speech")?.modelId ??
+    modeByValue.get(selectedMode.value)?.modelId ??
+    selectedModel.model_id;
+  const toggleOptions = Array.from(modeByValue.values());
+
+  return {
+    id: `audio:${familyKey}`,
+    name: getAudioModelName(selectedModel),
+    provider: selectedModel.model_id.split("/")[0] || "audio",
+    poster: "",
+    category: "audio",
+    variantIds: familyModels.map((model) => model.model_id),
+    primaryVariant,
+    toggles:
+      toggleOptions.length > 1
+        ? [
+            {
+              key: "mode",
+              labelKey: "smartPlayground.toggleMode",
+              options: toggleOptions.map((mode) => ({
+                value: mode.value,
+                labelKey: mode.labelKey,
+              })),
+              default: selectedMode.value,
+            },
+          ]
+        : [],
+    resolveVariant(filledFields, toggleValues) {
+      const requestedMode = toggleValues.mode ?? selectedMode.value;
+      if (
+        requestedMode !== "text-to-speech" &&
+        modeByValue.has(requestedMode)
+      ) {
+        return modeByValue.get(requestedMode)!.modelId;
+      }
+      if (
+        hasFilledAnyField(filledFields, AUDIO_FIELD_NAMES) &&
+        modeByValue.has("voice-clone")
+      ) {
+        return modeByValue.get("voice-clone")!.modelId;
+      }
+      return (
+        modeByValue.get(requestedMode)?.modelId ??
+        modeByValue.get("text-to-speech")?.modelId ??
+        primaryVariant
+      );
+    },
+  };
+}
+
+type ThreeDModeDefinition = {
+  value: string;
+  labelKey: string;
+  modelId: string;
+  rank: number;
+};
+
+function get3DModeDefinition(model: Model): ThreeDModeDefinition {
+  const id = model.model_id.toLowerCase();
+  const modelType = (model.type ?? "").toLowerCase();
+  const fields = extractModelFormFields(model);
+  const fieldNames = fields.map((field) => field.name.toLowerCase());
+  const requiredFieldNames = new Set(
+    fields
+      .filter((field) => field.required)
+      .map((field) => field.name.toLowerCase()),
+  );
+  const hasRequiredPrompt = requiredFieldNames.has("prompt");
+  const hasRequiredImage = fieldNames.some(
+    (name) =>
+      requiredFieldNames.has(name) &&
+      (name === "image" ||
+        name === "image_url" ||
+        name === "images" ||
+        name === "image_urls" ||
+        name.endsWith("_image") ||
+        name.endsWith("_image_url")),
+  );
+  const hasMultiViewInput = fieldNames.some((name) =>
+    [
+      "images",
+      "image_urls",
+      "front_image_url",
+      "front_image",
+      "back_image_url",
+      "back_image",
+      "left_image_url",
+      "left_image",
+      "right_image_url",
+      "right_image",
+    ].includes(name),
+  );
+
+  if (id.includes("sketch-to-3d")) {
+    return {
+      value: "sketch",
+      labelKey: "smartPlayground.modeSketch",
+      modelId: model.model_id,
+      rank: 25,
+    };
+  }
+
+  if (
+    id.includes("multi-view") ||
+    id.includes("multiview") ||
+    id.includes("multi-image") ||
+    id.includes("images-to-3d") ||
+    hasMultiViewInput
+  ) {
+    return {
+      value: "multi-view",
+      labelKey: "smartPlayground.modeMultiView",
+      modelId: model.model_id,
+      rank: 30,
+    };
+  }
+  if (
+    id.includes("text-to-3d") ||
+    modelType === "text-to-3d" ||
+    (hasRequiredPrompt && !hasRequiredImage)
+  ) {
+    return {
+      value: "text",
+      labelKey: "smartPlayground.modeText",
+      modelId: model.model_id,
+      rank: 10,
+    };
+  }
+  if (
+    id.includes("image-to-3d") ||
+    id.includes("image-to-mesh") ||
+    id.includes("image-to-model") ||
+    hasRequiredImage ||
+    fieldNames.includes("image") ||
+    fieldNames.includes("image_url")
+  ) {
+    return {
+      value: "image",
+      labelKey: "smartPlayground.modeImage",
+      modelId: model.model_id,
+      rank: 20,
+    };
+  }
+  return {
+    value: "text",
+    labelKey: "smartPlayground.modeText",
+    modelId: model.model_id,
+    rank: 10,
+  };
+}
+
+function buildDynamic3DSmartFamily(
+  models: Model[],
+  selectedModel: Model | null | undefined,
+): SmartFormFamily | undefined {
+  if (!selectedModel) return undefined;
+  const familyKey = get3DFamilyKey(selectedModel.model_id);
+  const familyModels = models.filter(
+    (model) => get3DFamilyKey(model.model_id) === familyKey,
+  );
+  if (familyModels.length === 0) return undefined;
+
+  const modeDefinitions = familyModels
+    .map(get3DModeDefinition)
+    .sort((a, b) => a.rank - b.rank || a.modelId.localeCompare(b.modelId));
+  const modeByValue = new Map<string, ThreeDModeDefinition>();
+  for (const mode of modeDefinitions) {
+    if (!modeByValue.has(mode.value)) {
+      modeByValue.set(mode.value, mode);
+    }
+  }
+
+  const selectedMode = get3DModeDefinition(selectedModel);
+  const primaryVariant =
+    modeByValue.get("text")?.modelId ??
+    modeByValue.get("image")?.modelId ??
+    modeByValue.get(selectedMode.value)?.modelId ??
+    selectedModel.model_id;
+  const toggleOptions = Array.from(modeByValue.values());
+
+  return {
+    id: `3d:${familyKey}`,
+    name: get3DModelName(selectedModel),
+    provider: selectedModel.model_id.split("/")[0] || "3d",
+    poster: "",
+    category: "3d",
+    variantIds: familyModels.map((model) => model.model_id),
+    primaryVariant,
+    toggles:
+      toggleOptions.length > 1
+        ? [
+            {
+              key: "mode",
+              labelKey: "smartPlayground.toggleMode",
+              options: toggleOptions.map((mode) => ({
+                value: mode.value,
+                labelKey: mode.labelKey,
+              })),
+              default: selectedMode.value,
+            },
+          ]
+        : [],
+    resolveVariant(filledFields, toggleValues) {
+      const requestedMode = toggleValues.mode ?? selectedMode.value;
+      if (modeByValue.has(requestedMode)) {
+        return modeByValue.get(requestedMode)!.modelId;
+      }
+      if (
+        hasFilledAnyField(filledFields, [
+          "images",
+          "image_urls",
+          "front_image",
+          "front_image_url",
+          "back_image",
+          "back_image_url",
+          "left_image",
+          "left_image_url",
+          "right_image",
+          "right_image_url",
+        ]) &&
+        modeByValue.has("multi-view")
+      ) {
+        return modeByValue.get("multi-view")!.modelId;
+      }
+      if (
+        hasFilledAnyField(filledFields, IMAGE_FIELD_NAMES) &&
+        modeByValue.has("image")
+      ) {
+        return modeByValue.get("image")!.modelId;
+      }
+      return (
+        modeByValue.get(requestedMode)?.modelId ??
+        modeByValue.get("text")?.modelId ??
+        modeByValue.get("image")?.modelId ??
+        primaryVariant
+      );
+    },
+  };
+}
+
+function tune3DFields(
+  fields: FormFieldConfig[],
+  mode: string,
+  modelId: string,
+): FormFieldConfig[] {
+  const normalizedMode = mode || "image";
+  const id = modelId.toLowerCase();
+  const fieldNotes: Record<string, { label: string; description: string }> = {
+    image: {
+      label: id.includes("sketch") ? "草图" : "单张参考图",
+      description: id.includes("sketch")
+        ? "上传草图或概念图，用于生成 3D 模型。"
+        : "上传单张物体参考图，适合图生 3D 模型。",
+    },
+    image_url: {
+      label: "单张参考图",
+      description: "上传单张物体参考图，适合图生 3D 模型。",
+    },
+    front_image: {
+      label: "前视图",
+      description: "上传物体正面视角图片，这是多视图生成的主要参考图。",
+    },
+    back_image: {
+      label: "后视图",
+      description: "上传物体背面视角图片，用于补全背部结构。",
+    },
+    left_image: {
+      label: "左视图",
+      description: "上传物体左侧视角图片，用于补全侧面结构。",
+    },
+    right_image: {
+      label: "右视图",
+      description: "上传物体右侧视角图片，用于补全侧面结构。",
+    },
+    images: {
+      label: "多视图图像",
+      description:
+        "上传同一物体的 2-4 张多角度图片，建议顺序为：前视图、左视图、后视图、右视图。",
+    },
+    image_urls: {
+      label: "多视图图像",
+      description:
+        "上传同一物体的 2-4 张多角度图片，建议顺序为：前视图、左视图、后视图、右视图。",
+    },
+    front_image_url: {
+      label: "前视图",
+      description: "上传物体正面视角图片，这是多视图生成的主要参考图。",
+    },
+    back_image_url: {
+      label: "后视图",
+      description: "上传物体背面视角图片，用于补全背部结构。",
+    },
+    left_image_url: {
+      label: "左视图",
+      description: "上传物体左侧视角图片，用于补全侧面结构。",
+    },
+    right_image_url: {
+      label: "右视图",
+      description: "上传物体右侧视角图片，用于补全侧面结构。",
+    },
+    mask_image: {
+      label: "区域蒙版",
+      description: "可选，上传蒙版以指定需要处理的区域。",
+    },
+    texture_image: {
+      label: "纹理参考图",
+      description: "可选，上传 2D 图片作为纹理风格或纹理细节参考。",
+    },
+    prompt: {
+      label: normalizedMode === "text" ? "3D 描述" : "补充提示词",
+      description:
+        normalizedMode === "text"
+          ? "描述你想创建的 3D 模型、材质、风格和细节。"
+          : "可选，补充说明模型结构、材质、风格或需要强调的细节。",
+    },
+    negative_prompt: {
+      label: "反向提示词",
+      description: "可选，描述需要避免的形状、材质或瑕疵。",
+    },
+    texture_prompt: {
+      label: "纹理提示词",
+      description: "可选，描述希望生成的纹理风格或材质细节。",
+    },
+    addons: {
+      label: "高清扩展包",
+      description: "可选，生成更高分辨率纹理或更高面数网格。",
+    },
+    material: {
+      label: "材质类型",
+      description: "选择输出模型的材质类型。",
+    },
+    geometry_instruct_mode: {
+      label: "几何指令模式",
+      description: "控制提示词如何影响几何结构。",
+    },
+    texture_mode: {
+      label: "纹理模式",
+      description: "选择纹理生成方式。",
+    },
+    texture_delight: {
+      label: "去光照纹理",
+      description: "尝试去除参考图中的环境光照，让纹理更干净。",
+    },
+    hd_texture: {
+      label: "高清纹理",
+      description: "生成更高分辨率纹理，通常耗时和成本更高。",
+    },
+    is_micro: {
+      label: "微型模型",
+      description: "生成更轻量的模型文件。",
+    },
+    is_symmetric: {
+      label: "对称模型",
+      description: "按对称结构生成模型，适合正面对称物体。",
+    },
+    tier: {
+      label: "生成档位",
+      description: "选择生成速度和质量档位。",
+    },
+    quality_and_mesh: {
+      label: "质量与网格",
+      description: "选择生成质量和网格类型，面数越高通常细节越多。",
+    },
+    geometry_file_format: {
+      label: "模型格式",
+      description: "选择导出的 3D 模型文件格式。",
+    },
+    geometry_quality: {
+      label: "几何质量",
+      description: "控制模型几何细节，详细模式会增加生成成本和耗时。",
+    },
+    texture_quality: {
+      label: "纹理质量",
+      description: "控制纹理清晰度，详细模式会生成更高分辨率纹理。",
+    },
+    texture_alignment: {
+      label: "纹理对齐",
+      description: "选择纹理按原图对齐，还是按生成后的几何结构对齐。",
+    },
+    face_limit: {
+      label: "面数限制",
+      description: "目标网格面数，留空则由模型自适应决定。",
+    },
+    face_count: {
+      label: "目标面数",
+      description: "控制输出模型的面数范围，面数越高细节越多。",
+    },
+    target_polycount: {
+      label: "目标多边形数",
+      description: "控制输出模型的多边形数量。",
+    },
+    octree_resolution: {
+      label: "八叉树分辨率",
+      description: "控制 3D 重建精度，数值越高细节越多。",
+    },
+    num_inference_steps: {
+      label: "推理步数",
+      description: "推理步数越高通常更精细，但耗时更长。",
+    },
+    guidance_scale: {
+      label: "引导强度",
+      description: "控制输入图片或提示词对 3D 结果的影响强度。",
+    },
+    generate_type: {
+      label: "生成类型",
+      description: "选择生成带纹理模型、低多边形模型或白模。",
+    },
+    polygon_type: {
+      label: "面片类型",
+      description: "选择三角面或四边面拓扑。",
+    },
+    topology: {
+      label: "拓扑类型",
+      description: "选择四边面或三角面拓扑。",
+    },
+    symmetry_mode: {
+      label: "对称模式",
+      description: "控制模型是否按对称结构生成。",
+    },
+    art_style: {
+      label: "艺术风格",
+      description: "选择生成模型的整体风格。",
+    },
+    orientation: {
+      label: "模型朝向",
+      description: "控制模型默认朝向，或自动对齐输入图片。",
+    },
+    auto_size: {
+      label: "自动尺寸",
+      description: "根据真实世界比例自动缩放模型尺寸。",
+    },
+    texture: {
+      label: "生成纹理",
+      description: "开启后会为模型生成纹理贴图。",
+    },
+    pbr: {
+      label: "PBR 材质",
+      description: "开启后生成适合物理渲染的材质贴图。",
+    },
+    enable_pbr: {
+      label: "PBR 材质",
+      description: "开启后生成适合物理渲染的材质贴图。",
+    },
+    quad: {
+      label: "四边面网格",
+      description: "开启后生成四边面拓扑，适合后续编辑。",
+    },
+    ta_pose: {
+      label: "T/A 姿态",
+      description: "适合角色模型绑定或后续动画制作。",
+    },
+    should_remesh: {
+      label: "重新拓扑",
+      description: "开启后会优化网格拓扑，让模型更干净。",
+    },
+    should_texture: {
+      label: "生成纹理",
+      description: "开启后会为模型生成纹理贴图。",
+    },
+    enable_prompt_expansion: {
+      label: "扩展提示词",
+      description: "自动扩展提示词以增强 3D 细节。",
+    },
+    use_original_alpha: {
+      label: "使用原图透明通道",
+      description: "处理图片输入时保留原图透明通道。",
+    },
+    preview_render: {
+      label: "生成预览图",
+      description: "在下载列表中附带模型预览渲染图。",
+    },
+    seed: {
+      label: "随机种子",
+      description: "相同种子可复现相近结果，留空则随机。",
+    },
+    model_seed: {
+      label: "模型种子",
+      description: "控制几何结构生成的随机性。",
+    },
+    texture_seed: {
+      label: "纹理种子",
+      description: "控制纹理生成的随机性。",
+    },
+    image_seed: {
+      label: "图片种子",
+      description: "控制参考图解析阶段的随机性。",
+    },
+  };
+
+  const hiddenByDefault = new Set([
+    "image_seed",
+    "model_seed",
+    "texture_seed",
+    "face_limit",
+    "bbox_condition",
+  ]);
+  const compactOrder = new Map<string, number>([
+    ["prompt", 0],
+    ["negative_prompt", 1],
+    ["image", 2],
+    ["image_url", 2],
+    ["images", 3],
+    ["image_urls", 3],
+    ["front_image_url", 4],
+    ["front_image", 4],
+    ["left_image_url", 5],
+    ["left_image", 5],
+    ["back_image_url", 6],
+    ["back_image", 6],
+    ["right_image_url", 7],
+    ["right_image", 7],
+    ["mask_image", 8],
+    ["texture_quality", 20],
+    ["geometry_quality", 21],
+    ["texture_alignment", 22],
+    ["orientation", 23],
+    ["texture", 30],
+    ["pbr", 31],
+    ["enable_pbr", 31],
+    ["auto_size", 32],
+    ["quad", 33],
+  ]);
+
+  return fields
+    .filter((field) => {
+      const name = field.name.toLowerCase();
+      return !field.hidden && !hiddenByDefault.has(name);
+    })
+    .map((field) => {
+      const name = field.name.toLowerCase();
+      const note = fieldNotes[name];
+      return {
+        ...field,
+        ...(note ?? {}),
+        hidden: field.hidden || hiddenByDefault.has(name),
+      };
+    })
+    .sort((a, b) => {
+      const orderA = compactOrder.get(a.name.toLowerCase()) ?? 100;
+      const orderB = compactOrder.get(b.name.toLowerCase()) ?? 100;
+      if (orderA !== orderB) return orderA - orderB;
+      if (a.required !== b.required) return a.required ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
 }
 
 function mergeVariantFormFields(
@@ -233,9 +958,16 @@ function buildNormalizedInput(
   return normalizePayloadArrays(cleanedInput, fields);
 }
 
+function hasFilledAnyField(
+  filledFields: Set<string>,
+  names: string[],
+): boolean {
+  return names.some((name) => filledFields.has(name));
+}
+
 function isSmartTriggerField(
   field: FormFieldConfig,
-  category: "image" | "video" | "other",
+  category: "image" | "video" | "audio" | "3d" | "other",
 ): boolean {
   const name = field.name.toLowerCase();
   if (name.includes("mask")) return false;
@@ -254,6 +986,8 @@ function isSmartTriggerField(
 
   if (category === "image") return isImageField;
   if (category === "video") return isImageField || isVideoField || isAudioField;
+  if (category === "audio") return isAudioField;
+  if (category === "3d") return isImageField;
   return isImageField || isVideoField || isAudioField;
 }
 
@@ -524,6 +1258,17 @@ function tuneInfiniteTalkFields(
 function getSmartToggleFallback(labelKey: string, value: string): string {
   if (labelKey.endsWith("modeGenerate")) return "生成";
   if (labelKey.endsWith("modeEdit")) return "编辑";
+  if (labelKey.endsWith("modeTextToSpeech")) return "文字转语音";
+  if (labelKey.endsWith("modeVoiceClone")) return "音色克隆";
+  if (labelKey.endsWith("modeVoiceDesign")) return "音色设计";
+  if (labelKey.endsWith("modeTextToAudio")) return "文生音频";
+  if (labelKey.endsWith("modeAudioToAudio")) return "音频转换";
+  if (labelKey.endsWith("modeMusic")) return "音乐生成";
+  if (labelKey.endsWith("modeMusicCover")) return "音乐翻唱";
+  if (labelKey.endsWith("modeText")) return "文本";
+  if (labelKey.endsWith("modeImage")) return "图像";
+  if (labelKey.endsWith("modeSketch")) return "草图";
+  if (labelKey.endsWith("modeMultiView")) return "多视图";
   if (labelKey.endsWith("modeImageToVideo")) return "图生视频";
   if (labelKey.endsWith("modeVideoToVideo")) return "视频生视频";
   if (labelKey.endsWith("qualityStd")) return "标准";
@@ -534,12 +1279,14 @@ function getSmartToggleFallback(labelKey: string, value: string): string {
 }
 
 function canUseSmartFamilyForWorkspace(
-  category: "image" | "video" | "other" | undefined,
+  category: "image" | "video" | "audio" | "3d" | "other" | undefined,
   workspace: PlaygroundWorkspace,
 ) {
   return (
     (workspace === "image" && category === "image") ||
     (workspace === "video" && category === "video") ||
+    (workspace === "audio" && category === "audio") ||
+    (workspace === "3d" && category === "3d") ||
     (workspace === "avatar" && category === "other")
   );
 }
@@ -563,6 +1310,11 @@ const DEFAULT_MODEL_IDS: Partial<Record<PlaygroundWorkspace, string[]>> = {
     "bytedance/seedance-2.0/text-to-video",
     "bytedance/seedance-v2/text-to-video",
     "bytedance/seedance-v2.0/image-to-video",
+  ],
+  audio: [
+    "wavespeed-ai/qwen3-tts/text-to-speech",
+    "wavespeed-ai/qwen3-tts",
+    "qwen3-tts/text-to-speech",
   ],
 };
 
@@ -589,6 +1341,15 @@ function getDefaultModelRank(model: Model, workspace: PlaygroundWorkspace) {
     if (isSeedance && isV2) return 1;
     if (isSeedance && id.includes("text-to-video")) return 2;
     if (isSeedance) return 3;
+  }
+
+  if (workspace === "audio") {
+    if (id.includes("qwen3") && id.includes("text-to-speech")) return 0;
+    if (id.includes("qwen3") && id.includes("tts")) return 1;
+    if (id.includes("text-to-speech") || id.includes("tts")) return 2;
+    if (id.includes("voice-clone")) return 3;
+    if (id.includes("voice-design")) return 4;
+    if (id.includes("music")) return 5;
   }
 
   return Number.POSITIVE_INFINITY;
@@ -644,7 +1405,7 @@ function isOfficialWaveSpeedBaseUrl(baseUrl: string) {
   try {
     return new URL(baseUrl).hostname === "api.wavespeed.ai";
   } catch {
-    return baseUrl.replace(/\/+$/, "") === DEFAULT_API_BASE_URL;
+    return baseUrl.replace(/\/+$/, "") === OFFICIAL_WAVESPEED_API_BASE_URL;
   }
 }
 
@@ -845,11 +1606,23 @@ export function PlaygroundPage({
   const pricingModelRef = useRef<string | null>(null);
 
   const activeSmartFamily = useMemo(() => {
+    if (workspace === "audio") {
+      return buildDynamicAudioSmartFamily(
+        filteredModels,
+        activeTab?.selectedModel,
+      );
+    }
+    if (workspace === "3d") {
+      return buildDynamic3DSmartFamily(
+        filteredModels,
+        activeTab?.selectedModel,
+      );
+    }
     const family = findFamilyByVariantId(activeTab?.selectedModel?.model_id);
     return canUseSmartFamilyForWorkspace(family?.category, workspace)
       ? family
       : undefined;
-  }, [activeTab?.selectedModel?.model_id, workspace]);
+  }, [activeTab?.selectedModel, filteredModels, workspace]);
 
   const smartVariantModels = useMemo(() => {
     if (!activeSmartFamily) return [];
@@ -917,6 +1690,15 @@ export function PlaygroundPage({
 
   const smartVisibleFields = useMemo(() => {
     if (!activeSmartFamily || smartVariantModels.length === 0) return undefined;
+    if (activeSmartFamily.category === "3d" && smartResolvedModel) {
+      return tune3DFields(
+        extractModelFormFields(smartResolvedModel),
+        activeSmartToggleValues.mode ??
+          get3DModeDefinition(smartResolvedModel).value,
+        smartResolvedModel.model_id,
+      );
+    }
+
     const mergedFields = mergeVariantFormFields(
       smartVariantModels,
       activeSmartFamily.primaryVariant,
@@ -1442,15 +2224,31 @@ export function PlaygroundPage({
   ]);
 
   const handleModelChange = (modelId: string) => {
+    const selectedModel = filteredModels.find(
+      (model) => model.model_id === modelId,
+    );
+    const dynamicFamily =
+      workspace === "audio"
+        ? buildDynamicAudioSmartFamily(filteredModels, selectedModel)
+        : workspace === "3d"
+          ? buildDynamic3DSmartFamily(filteredModels, selectedModel)
+          : undefined;
     const family =
       workspace === "image" || workspace === "video" || workspace === "avatar"
         ? findFamilyByVariantId(modelId)
         : undefined;
     const targetModelId =
-      canUseSmartFamilyForWorkspace(family?.category, workspace) &&
-      filteredModels.some((model) => model.model_id === family.primaryVariant)
-        ? family.primaryVariant
-        : modelId;
+      dynamicFamily &&
+      filteredModels.some(
+        (model) => model.model_id === dynamicFamily.primaryVariant,
+      )
+        ? dynamicFamily.primaryVariant
+        : canUseSmartFamilyForWorkspace(family?.category, workspace) &&
+            filteredModels.some(
+              (model) => model.model_id === family.primaryVariant,
+            )
+          ? family.primaryVariant
+          : modelId;
     const model = filteredModels.find((m) => m.model_id === targetModelId);
     if (model) {
       if (activeTab) {
@@ -1471,6 +2269,20 @@ export function PlaygroundPage({
   const handleSmartToggleChange = useCallback(
     (key: string, value: string) => {
       if (!activeSmartFamily) return;
+      const nextToggleValues = {
+        ...activeSmartToggleValues,
+        [key]: value,
+      };
+      const resolvedVariantId = activeSmartFamily.resolveVariant(
+        smartFilledFields,
+        nextToggleValues,
+      );
+      const resolvedModel = findResolvedSmartModel(
+        smartVariantModels,
+        resolvedVariantId,
+        activeSmartFamily.primaryVariant,
+      );
+
       setSmartToggleOverrides((prev) => ({
         ...prev,
         [activeSmartFamily.id]: {
@@ -1478,8 +2290,27 @@ export function PlaygroundPage({
           [key]: value,
         },
       }));
+
+      if (
+        resolvedModel &&
+        activeTab?.selectedModel?.model_id !== resolvedModel.model_id
+      ) {
+        setSelectedModelPreservingForm(resolvedModel);
+        navigate(`${routeBase}/${encodeURIComponent(resolvedModel.model_id)}`, {
+          replace: true,
+        });
+      }
     },
-    [activeSmartFamily],
+    [
+      activeSmartFamily,
+      activeSmartToggleValues,
+      activeTab?.selectedModel?.model_id,
+      navigate,
+      routeBase,
+      setSelectedModelPreservingForm,
+      smartFilledFields,
+      smartVariantModels,
+    ],
   );
 
   // Bind activeTabId into the onChange callback so that async operations
@@ -1900,14 +2731,20 @@ export function PlaygroundPage({
                 hideVariantSelector={
                   workspace === "image" ||
                   workspace === "video" ||
-                  workspace === "avatar"
+                  workspace === "avatar" ||
+                  workspace === "audio" ||
+                  workspace === "3d"
                 }
                 variant={
                   workspace === "video"
                     ? "video"
                     : workspace === "avatar"
                       ? "avatar"
-                      : "default"
+                      : workspace === "audio"
+                        ? "audio"
+                        : workspace === "3d"
+                          ? "3d"
+                          : "default"
                 }
               />
               {activeSmartFamily && activeSmartFamily.toggles.length > 0 && (
@@ -1928,7 +2765,7 @@ export function PlaygroundPage({
                               handleSmartToggleChange(toggle.key, option.value)
                             }
                             className={cn(
-                              "px-4 py-2 text-xs font-medium transition-colors",
+                              "px-3 py-1.5 text-xs font-medium transition-colors",
                               isSelected
                                 ? "bg-white/[0.12] text-white"
                                 : "text-[#9ca3af] hover:bg-white/[0.04] hover:text-white",
@@ -1954,7 +2791,7 @@ export function PlaygroundPage({
             <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
               {activeTab?.selectedModel ? (
                 <DynamicForm
-                  model={activeTab.selectedModel}
+                  model={runModel ?? activeTab.selectedModel}
                   values={activeTab.formValues}
                   validationErrors={activeTab.validationErrors}
                   onChange={handleFormValueChange}
@@ -2088,9 +2925,10 @@ export function PlaygroundPage({
                       ) : (
                         workspaceTabs.map((tab) => {
                           const tabTitle = tab.selectedModel
-                            ? workspace === "image"
-                              ? getFriendlyModelName(tab.selectedModel)
-                              : tab.selectedModel.model_id
+                            ? getWorkspaceModelName(
+                                tab.selectedModel,
+                                workspace,
+                              )
                             : t("playground.tabs.newTab");
                           return (
                             <div
@@ -2180,9 +3018,7 @@ export function PlaygroundPage({
                     const isActive =
                       tab.id === activeTabId && rightPanelTab === "result";
                     const tabTitle = tab.selectedModel
-                      ? workspace === "image"
-                        ? getFriendlyModelName(tab.selectedModel)
-                        : tab.selectedModel.model_id
+                      ? getWorkspaceModelName(tab.selectedModel, workspace)
                       : t("playground.tabs.newTab");
                     return (
                       <div

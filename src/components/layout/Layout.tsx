@@ -378,7 +378,7 @@ export function Layout() {
               <Zap className="h-8 w-8 text-white" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold gradient-text mb-2">WaveSpeed</h1>
+          <h1 className="text-3xl font-bold gradient-text mb-2">Lovarts</h1>
           <p className="text-muted-foreground">
             {t("apiKeyRequired.defaultDesc")}
           </p>
@@ -547,9 +547,7 @@ export function Layout() {
                     />
                   </PersistentPage>
                   <PersistentPage
-                    visited={hasVisited(
-                      "/free-tools/video-watermark-remover",
-                    )}
+                    visited={hasVisited("/free-tools/video-watermark-remover")}
                     active={
                       location.pathname ===
                       "/free-tools/video-watermark-remover"
@@ -559,9 +557,7 @@ export function Layout() {
                     }
                   >
                     <LazyVideoWatermarkRemoverPage
-                      key={
-                        pageKeys["/free-tools/video-watermark-remover"] || 0
-                      }
+                      key={pageKeys["/free-tools/video-watermark-remover"] || 0}
                     />
                   </PersistentPage>
                   <PersistentPage

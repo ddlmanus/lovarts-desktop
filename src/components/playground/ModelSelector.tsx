@@ -9,6 +9,8 @@ import {
   BarChart3,
   Sparkles,
   UserRound,
+  Music2,
+  Box,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fuzzySearch } from "@/lib/fuzzySearch";
@@ -22,7 +24,7 @@ interface ModelSelectorProps {
   onChange: (modelId: string) => void;
   disabled?: boolean;
   hideVariantSelector?: boolean;
-  variant?: "default" | "video" | "avatar";
+  variant?: "default" | "video" | "avatar" | "audio" | "3d";
 }
 
 type ModelBadge = {
@@ -70,6 +72,38 @@ function getAvatarGroupKey(modelId: string): string {
     return "kwaivgi/kling-motion-control";
   }
   return getBaseFamily(modelId);
+}
+
+function getAudioGroupKey(modelId: string): string {
+  const lower = modelId.toLowerCase();
+  if (
+    lower.includes("qwen3") &&
+    (lower.includes("tts") ||
+      lower.includes("speech") ||
+      lower.includes("voice"))
+  ) {
+    return "wavespeed-ai/qwen3-tts";
+  }
+  return getBaseFamily(modelId);
+}
+
+function get3DGroupKey(modelId: string): string {
+  const parts = modelId.split("/");
+  const provider = parts[0] || modelId;
+  const family = parts[1] || "";
+  const variant = parts[2] || "";
+  const id = modelId.toLowerCase();
+
+  if (provider === "wavespeed-ai" && family === "hunyuan3d") {
+    if (variant.startsWith("v2")) return "wavespeed-ai/hunyuan3d/v2";
+    return `${provider}/${family}`;
+  }
+
+  if (id.startsWith("wavespeed-ai/hunyuan-3d-v3.1/")) {
+    return "wavespeed-ai/hunyuan-3d-v3.1";
+  }
+
+  return getModelFamily(modelId);
 }
 
 /** Provider = first segment. e.g. "bytedance/seedream-v5.0-lite" → "bytedance" */
@@ -195,6 +229,53 @@ function getAvatarDisplayName(model: Model): string {
   );
 }
 
+function normalizeAudioDisplayLabel(value: string): string {
+  return value
+    .replace(/\bTts\b/g, "TTS")
+    .replace(/\bAi\b/g, "AI")
+    .replace(/\bApi\b/g, "API");
+}
+
+function getAudioDisplayName(model: Model): string {
+  const id = model.model_id.toLowerCase();
+  const family = findFamilyByVariantId(model.model_id);
+
+  if (id.includes("qwen3") && (id.includes("tts") || id.includes("speech"))) {
+    return "Qwen3 TTS";
+  }
+  return normalizeAudioDisplayLabel(
+    family?.name || formatSlug(getFamilyName(model.model_id)),
+  );
+}
+
+function normalize3DDisplayLabel(value: string): string {
+  return value
+    .replace(/\b3d\b/gi, "3D")
+    .replace(/\bV(\d)/g, "V$1")
+    .replace(/\bH(\d)/g, "H$1");
+}
+
+function get3DDisplayName(model: Model): string {
+  const provider = getProvider(model.model_id).toLowerCase();
+  const familyName = getFamilyName(model.model_id);
+  const family = findFamilyByVariantId(model.model_id);
+  const formatted = normalize3DDisplayLabel(
+    family?.name || formatSlug(familyName),
+  );
+
+  if (provider === "tripo3d") {
+    if (familyName.toLowerCase().includes("triposplat")) return "TripoSplat";
+    return `Tripo3D ${formatted}`;
+  }
+  if (provider === "hyper3d") {
+    return formatted.replace(/^Rodin/i, "Rodin");
+  }
+  if (familyName.toLowerCase().includes("hunyuan")) {
+    return formatted.replace(/^Hunyuan/i, "Hunyuan");
+  }
+  return formatted;
+}
+
 const VIDEO_MODEL_ORDER = [
   "seedance-2.0",
   "seedance-2.0-turbo",
@@ -228,6 +309,23 @@ const AVATAR_MODEL_ORDER = [
   "skyreels",
 ];
 
+const AUDIO_MODEL_ORDER = [
+  "qwen3-tts",
+  "voice-clone",
+  "voice-design",
+  "text-to-speech",
+  "music",
+];
+
+const THREE_D_MODEL_ORDER = [
+  "tripo3d-h3.1",
+  "triposplat",
+  "tripo3d-v2.5",
+  "rodin-v2.5",
+  "rodin-v2",
+  "hunyuan-3d-v3.1",
+];
+
 function getVideoSortRank(model: Model): number {
   const name = normalizeDisplayName(getVideoDisplayName(model));
   const rank = VIDEO_MODEL_ORDER.findIndex((item) => name.includes(item));
@@ -238,6 +336,27 @@ function getAvatarSortRank(model: Model): number {
   const name = normalizeDisplayName(getAvatarDisplayName(model));
   const rank = AVATAR_MODEL_ORDER.findIndex((item) => name.includes(item));
   return rank === -1 ? 1000 : rank;
+}
+
+function getAudioSortRank(model: Model): number {
+  const name = normalizeDisplayName(getAudioDisplayName(model));
+  const rank = AUDIO_MODEL_ORDER.findIndex((item) => name.includes(item));
+  return rank === -1 ? 1000 : rank;
+}
+
+function get3DSortRank(model: Model): number {
+  const name = normalizeDisplayName(get3DDisplayName(model));
+  const rank = THREE_D_MODEL_ORDER.findIndex((item) => name.includes(item));
+  return rank === -1 ? 1000 : rank;
+}
+
+function get3DRepresentativeRank(model: Model): number {
+  const id = model.model_id.toLowerCase();
+  if (id.includes("text-to-3d")) return 0;
+  if (id.includes("image-to-3d")) return 1;
+  if (id.includes("sketch-to-3d")) return 2;
+  if (id.includes("multiview") || id.includes("multi-view")) return 3;
+  return 10;
 }
 
 function getModelBadge(modelId: string | undefined): ModelBadge | null {
@@ -255,6 +374,7 @@ function getModelBadge(modelId: string | undefined): ModelBadge | null {
   if (
     id.includes("happy-horse") ||
     id.includes("longcat") ||
+    id.includes("tripo3d/h3.1") ||
     (id.includes("pixverse") && id.includes("mimic"))
   ) {
     return {
@@ -276,6 +396,7 @@ function getModelBadge(modelId: string | undefined): ModelBadge | null {
     family.includes("kling-o3") ||
     family.includes("kling-v3") ||
     family.includes("veo-3.1-lite") ||
+    id.includes("qwen3-tts") ||
     id.includes("infinitetalk") ||
     id.includes("skyreels-v3-pro")
   ) {
@@ -307,7 +428,7 @@ function ModelIcon({
   variant,
 }: {
   modelId: string;
-  variant: "default" | "video" | "avatar";
+  variant: "default" | "video" | "avatar" | "audio" | "3d";
 }) {
   if (variant === "default") return null;
   const glyph = getModelGlyph(modelId);
@@ -319,6 +440,10 @@ function ModelIcon({
         <BarChart3 className="h-4 w-4" />
       ) : variant === "avatar" ? (
         <UserRound className="h-4 w-4" />
+      ) : variant === "audio" ? (
+        <Music2 className="h-4 w-4" />
+      ) : variant === "3d" ? (
+        <Box className="h-4 w-4" />
       ) : (
         <Sparkles className="h-4 w-4" />
       )}
@@ -350,7 +475,10 @@ export function ModelSelector({
   const { t } = useTranslation();
   const isVideoVariant = variant === "video";
   const isAvatarVariant = variant === "avatar";
-  const isCompactVariant = isVideoVariant || isAvatarVariant;
+  const isAudioVariant = variant === "audio";
+  const is3DVariant = variant === "3d";
+  const isCompactVariant =
+    isVideoVariant || isAvatarVariant || isAudioVariant || is3DVariant;
   const isFavorite = useModelsStore((s) => s.isFavorite);
   const [isOpen, setIsOpen] = useState(false);
   const [variantOpen, setVariantOpen] = useState(false);
@@ -371,7 +499,11 @@ export function ModelSelector({
       ? getVideoDisplayName(selectedModel)
       : isAvatarVariant
         ? getAvatarDisplayName(selectedModel)
-        : formatSlug(getFamilyName(selectedModel.model_id))
+        : isAudioVariant
+          ? getAudioDisplayName(selectedModel)
+          : is3DVariant
+            ? get3DDisplayName(selectedModel)
+            : formatSlug(getFamilyName(selectedModel.model_id))
     : "";
 
   // Family variants: all models sharing the same base family (includes speed variants like -fast, -turbo)
@@ -463,12 +595,52 @@ export function ModelSelector({
       });
   }, [models]);
 
+  const audioFamilyModels = useMemo(() => {
+    const seen = new Set<string>();
+    return models
+      .filter((model) => {
+        const key = getAudioGroupKey(model.model_id);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => {
+        const rankDiff = getAudioSortRank(a) - getAudioSortRank(b);
+        if (rankDiff !== 0) return rankDiff;
+        return getAudioDisplayName(a).localeCompare(getAudioDisplayName(b));
+      });
+  }, [models]);
+
+  const threeDFamilyModels = useMemo(() => {
+    const bestByFamily = new Map<string, Model>();
+    for (const model of models) {
+      const key = get3DGroupKey(model.model_id);
+      const current = bestByFamily.get(key);
+      if (
+        !current ||
+        get3DRepresentativeRank(model) < get3DRepresentativeRank(current)
+      ) {
+        bestByFamily.set(key, model);
+      }
+    }
+
+    return Array.from(bestByFamily.values()).sort((a, b) => {
+      const rankDiff = get3DSortRank(a) - get3DSortRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return get3DDisplayName(a).localeCompare(get3DDisplayName(b));
+    });
+  }, [models]);
+
   const filteredModels = useMemo(() => {
     const displayModels = isVideoVariant
       ? videoFamilyModels
       : isAvatarVariant
         ? avatarFamilyModels
-        : familyModels;
+        : isAudioVariant
+          ? audioFamilyModels
+          : is3DVariant
+            ? threeDFamilyModels
+            : familyModels;
     if (!debouncedSearch.trim()) {
       return isCompactVariant
         ? displayModels
@@ -483,6 +655,8 @@ export function ModelSelector({
     return fuzzySearch(searchSource, debouncedSearch, (model) => [
       isVideoVariant ? getVideoDisplayName(model) : "",
       isAvatarVariant ? getAvatarDisplayName(model) : "",
+      isAudioVariant ? getAudioDisplayName(model) : "",
+      is3DVariant ? get3DDisplayName(model) : "",
       getModelFamily(model.model_id),
       model.name || "",
       model.model_id,
@@ -492,9 +666,13 @@ export function ModelSelector({
     familyModels,
     videoFamilyModels,
     avatarFamilyModels,
+    audioFamilyModels,
+    threeDFamilyModels,
     debouncedSearch,
     hideVariantSelector,
+    is3DVariant,
     isAvatarVariant,
+    isAudioVariant,
     isCompactVariant,
     isVideoVariant,
   ]);
@@ -694,18 +872,28 @@ export function ModelSelector({
                         : isAvatarVariant
                           ? getAvatarGroupKey(value) ===
                             getAvatarGroupKey(model.model_id)
-                          : getBaseFamily(value) ===
-                            getBaseFamily(model.model_id));
+                          : isAudioVariant
+                            ? getAudioGroupKey(value) ===
+                              getAudioGroupKey(model.model_id)
+                            : is3DVariant
+                              ? get3DGroupKey(value) ===
+                                get3DGroupKey(model.model_id)
+                              : getBaseFamily(value) ===
+                                getBaseFamily(model.model_id));
                     const isHighlighted = idx === highlightIndex;
                     const family = getModelFamily(model.model_id);
                     const displayName = isVideoVariant
                       ? getVideoDisplayName(model)
                       : isAvatarVariant
                         ? getAvatarDisplayName(model)
-                        : hideVariantSelector
-                          ? formatSlug(getFamilyName(model.model_id))
-                          : model.name ||
-                            formatSlug(getFamilyName(model.model_id));
+                        : isAudioVariant
+                          ? getAudioDisplayName(model)
+                          : is3DVariant
+                            ? get3DDisplayName(model)
+                            : hideVariantSelector
+                              ? formatSlug(getFamilyName(model.model_id))
+                              : model.name ||
+                                formatSlug(getFamilyName(model.model_id));
                     const badge = getModelBadge(model.model_id);
                     return (
                       <button

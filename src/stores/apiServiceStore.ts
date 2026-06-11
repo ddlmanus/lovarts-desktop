@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   API_SERVICE_PRESETS,
   DEFAULT_API_BASE_URL,
+  OFFICIAL_WAVESPEED_API_BASE_URL,
   apiClient,
   type ApiServiceId,
 } from "@/api/client";
@@ -24,7 +25,7 @@ interface ApiServiceState extends ApiServiceConfig {
 }
 
 const DEFAULT_SERVICE_CONFIG: ApiServiceConfig = {
-  serviceId: "wavespeed",
+  serviceId: "ideart-production",
   customBaseUrl: "",
 };
 
@@ -42,24 +43,58 @@ function resolveBaseUrlFromConfig(config: Partial<ApiServiceConfig>): string {
   return API_SERVICE_PRESETS[serviceId]?.baseUrl || DEFAULT_API_BASE_URL;
 }
 
+function normalizeStoredConfig(
+  config: Partial<ApiServiceConfig>,
+): ApiServiceConfig {
+  const serviceId = config.serviceId || DEFAULT_SERVICE_CONFIG.serviceId;
+  const customBaseUrl = normalizeBaseUrl(config.customBaseUrl);
+
+  if (serviceId === "custom") return { serviceId, customBaseUrl };
+  if (serviceId === "wavespeed" || serviceId === "ideart-local") {
+    return DEFAULT_SERVICE_CONFIG;
+  }
+  return {
+    serviceId:
+      serviceId in API_SERVICE_PRESETS
+        ? serviceId
+        : DEFAULT_SERVICE_CONFIG.serviceId,
+    customBaseUrl,
+  };
+}
+
 async function loadStoredConfig(): Promise<ApiServiceConfig> {
   if (window.electronAPI?.getSettings) {
     const settings = await window.electronAPI.getSettings();
-    return {
-      serviceId:
-        (settings.apiServiceId as ApiServiceId | undefined) ||
-        DEFAULT_SERVICE_CONFIG.serviceId,
+    const config = normalizeStoredConfig({
+      serviceId: settings.apiServiceId as ApiServiceId | undefined,
       customBaseUrl: String(settings.customApiBaseUrl || ""),
-    };
+    });
+    const storedBaseUrl = normalizeBaseUrl(settings.apiBaseUrl);
+    if (
+      (settings.apiServiceId !== "custom" &&
+        storedBaseUrl === OFFICIAL_WAVESPEED_API_BASE_URL) ||
+      config.serviceId !== settings.apiServiceId ||
+      config.customBaseUrl !== String(settings.customApiBaseUrl || "")
+    ) {
+      await saveStoredConfig(config);
+    }
+    return config;
   }
 
   try {
     const raw = localStorage.getItem(SERVICE_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
-    return {
-      serviceId: parsed.serviceId || DEFAULT_SERVICE_CONFIG.serviceId,
+    const config = normalizeStoredConfig({
+      serviceId: parsed.serviceId as ApiServiceId | undefined,
       customBaseUrl: String(parsed.customBaseUrl || ""),
-    };
+    });
+    if (
+      config.serviceId !== parsed.serviceId ||
+      config.customBaseUrl !== String(parsed.customBaseUrl || "")
+    ) {
+      localStorage.setItem(SERVICE_STORAGE_KEY, JSON.stringify(config));
+    }
+    return config;
   } catch {
     return DEFAULT_SERVICE_CONFIG;
   }
@@ -97,10 +132,7 @@ export const useApiServiceStore = create<ApiServiceState>((set, get) => ({
     set({ isLoading: true, hasLoaded: true });
     try {
       const stored = await loadStoredConfig();
-      const next: ApiServiceConfig = {
-        serviceId: stored.serviceId || "wavespeed",
-        customBaseUrl: normalizeBaseUrl(stored.customBaseUrl),
-      };
+      const next = normalizeStoredConfig(stored);
       const baseUrl = resolveBaseUrlFromConfig(next);
       apiClient.setBaseUrl(baseUrl);
       useModelsStore.getState().loadCachedModelsForCurrentService();

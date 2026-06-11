@@ -11,7 +11,8 @@ import packageJson from "../../package.json";
 export const IDEART_API_BASE_URL_STORAGE_KEY = "ideart_gateway_base_url";
 export const IDEART_PRODUCTION_API_BASE_URL = "https://lovarts.art";
 export const IDEART_LOCAL_API_BASE_URL = "http://127.0.0.1:3001";
-export const DEFAULT_API_BASE_URL = "https://api.wavespeed.ai";
+export const OFFICIAL_WAVESPEED_API_BASE_URL = "https://api.wavespeed.ai";
+export const DEFAULT_API_BASE_URL = IDEART_PRODUCTION_API_BASE_URL;
 export type ApiServiceId =
   | "wavespeed"
   | "ideart-local"
@@ -25,7 +26,7 @@ export const API_SERVICE_PRESETS: Record<
   wavespeed: {
     id: "wavespeed",
     name: "WaveSpeed 官方",
-    baseUrl: DEFAULT_API_BASE_URL,
+    baseUrl: OFFICIAL_WAVESPEED_API_BASE_URL,
   },
   "ideart-local": {
     id: "ideart-local",
@@ -222,6 +223,72 @@ interface PricingPayload {
   discount_rate?: number;
 }
 
+function extractOutputUrl(output: unknown): string | null {
+  if (typeof output === "string") return output.trim() || null;
+  if (!output || typeof output !== "object") return null;
+
+  const record = output as Record<string, unknown>;
+  const directOutputKeys = [
+    "url",
+    "download_url",
+    "file_url",
+    "image_url",
+    "video_url",
+    "audio_url",
+    "output_url",
+    "output",
+    "image",
+    "video",
+    "audio",
+    "file",
+  ];
+  const modelOutputKeys = [
+    "model_url",
+    "modelUrl",
+    "model_file",
+    "modelFile",
+    "glb_url",
+    "gltf_url",
+    "mesh_url",
+    "pbr_model",
+    "base_model",
+    "glb",
+    "gltf",
+    "model",
+  ];
+
+  for (const key of directOutputKeys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (value && typeof value === "object") {
+      const nested = extractOutputUrl(value);
+      if (nested) return nested;
+    }
+  }
+
+  for (const key of modelOutputKeys) {
+    const value = record[key];
+    if (typeof value === "string" && looksLikeFileReference(value)) {
+      return value.trim();
+    }
+    if (value && typeof value === "object") {
+      const nested = extractOutputUrl(value);
+      if (nested) return nested;
+    }
+  }
+
+  return null;
+}
+
+function looksLikeFileReference(value: string): boolean {
+  const str = value.trim();
+  return (
+    /^https?:\/\//i.test(str) ||
+    /^local-asset:\/\//i.test(str) ||
+    /\.(?:glb|gltf)(?:[?#].*)?$/i.test(str)
+  );
+}
+
 class WaveSpeedClient {
   private client: AxiosInstance;
   private webClient: AxiosInstance;
@@ -296,8 +363,29 @@ class WaveSpeedClient {
     try {
       return new URL(baseUrl).hostname === "api.wavespeed.ai";
     } catch {
-      return baseUrl.replace(/\/+$/, "") === DEFAULT_API_BASE_URL;
+      return baseUrl.replace(/\/+$/, "") === OFFICIAL_WAVESPEED_API_BASE_URL;
     }
+  }
+
+  private resolveOutputUrl(url: string): string {
+    try {
+      return new URL(url, this.getBaseUrl()).toString();
+    } catch {
+      return url;
+    }
+  }
+
+  private normalizePredictionResult<T extends PredictionResult>(result: T): T {
+    const outputs = result.outputs;
+    if (!Array.isArray(outputs)) return result;
+
+    return {
+      ...result,
+      outputs: outputs.map((output) => {
+        const url = extractOutputUrl(output);
+        return url ? this.resolveOutputUrl(url) : output;
+      }),
+    };
   }
 
   async listModels(): Promise<Model[]> {
@@ -338,7 +426,7 @@ class WaveSpeedClient {
           },
         );
       }
-      return response.data.data;
+      return this.normalizePredictionResult(response.data.data);
     } catch (error) {
       throw createAPIError(error, "Failed to run prediction");
     }
@@ -361,7 +449,7 @@ class WaveSpeedClient {
           details: response.data,
         });
       }
-      return response.data.data;
+      return this.normalizePredictionResult(response.data.data);
     } catch (error) {
       // Re-throw AxiosError directly so the polling loop in run() can detect
       // connection errors and retry instead of aborting the entire prediction.
@@ -388,9 +476,11 @@ class WaveSpeedClient {
         );
       }
       // The API might return 'input' field with the original inputs
-      return response.data.data as PredictionResult & {
-        input?: Record<string, unknown>;
-      };
+      return this.normalizePredictionResult(
+        response.data.data as PredictionResult & {
+          input?: Record<string, unknown>;
+        },
+      );
     } catch (error) {
       throw createAPIError(error, "Failed to get prediction details");
     }
@@ -552,7 +642,12 @@ class WaveSpeedClient {
           details: response.data,
         });
       }
-      return response.data.data;
+      return {
+        ...response.data.data,
+        items: (response.data.data.items || []).map((item) =>
+          this.normalizePredictionResult(item),
+        ),
+      };
     } catch (error) {
       throw createAPIError(error, "Failed to fetch history");
     }

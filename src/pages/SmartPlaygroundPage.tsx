@@ -35,12 +35,18 @@ import { ArrowLeft, Loader2, Play, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 
-function getCategoryAccent(category: "image" | "video" | "other") {
+function getCategoryAccent(
+  category: "image" | "video" | "audio" | "3d" | "other",
+) {
   switch (category) {
     case "video":
       return "from-purple-500 to-violet-500";
     case "image":
       return "from-sky-400 to-blue-500";
+    case "audio":
+      return "from-lime-300 to-emerald-500";
+    case "3d":
+      return "from-lime-300 to-green-500";
     default:
       return "from-emerald-400 to-teal-500";
   }

@@ -437,8 +437,8 @@ const assetsMetadataPath = join(userDataPath, "assets-metadata.json");
 
 const defaultSettings: Settings = {
   apiKey: "",
-  apiServiceId: "wavespeed",
-  apiBaseUrl: "https://api.wavespeed.ai",
+  apiServiceId: "ideart-production",
+  apiBaseUrl: "https://lovarts.art",
   customApiBaseUrl: "",
   theme: "system",
   defaultPollInterval: 1000,
@@ -450,11 +450,45 @@ const defaultSettings: Settings = {
   language: "auto",
 };
 
+function normalizeApiBaseUrl(value?: string | null): string {
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+function normalizeSettings(settings: Settings): Settings {
+  const apiBaseUrl = normalizeApiBaseUrl(settings.apiBaseUrl);
+  const customApiBaseUrl = normalizeApiBaseUrl(settings.customApiBaseUrl);
+  if (
+    settings.apiServiceId === "wavespeed" ||
+    settings.apiServiceId === "ideart-local" ||
+    (settings.apiServiceId !== "custom" &&
+      apiBaseUrl === "https://api.wavespeed.ai")
+  ) {
+    return {
+      ...settings,
+      apiServiceId: "ideart-production",
+      apiBaseUrl: "https://lovarts.art",
+      customApiBaseUrl: "",
+    };
+  }
+  return {
+    ...settings,
+    apiBaseUrl: apiBaseUrl || defaultSettings.apiBaseUrl,
+    customApiBaseUrl,
+  };
+}
+
 function loadSettings(): Settings {
   try {
     if (existsSync(settingsPath)) {
       const data = readFileSync(settingsPath, "utf-8");
-      return { ...defaultSettings, ...JSON.parse(data) };
+      const rawSettings = { ...defaultSettings, ...JSON.parse(data) };
+      const settings = normalizeSettings(rawSettings);
+      if (JSON.stringify(settings) !== JSON.stringify(rawSettings)) {
+        writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+      }
+      return settings;
     }
   } catch (error) {
     console.error("Failed to load settings:", error);
@@ -465,7 +499,7 @@ function loadSettings(): Settings {
 function saveSettings(settings: Partial<Settings>): void {
   try {
     const currentSettings = loadSettings();
-    const newSettings = { ...currentSettings, ...settings };
+    const newSettings = normalizeSettings({ ...currentSettings, ...settings });
     if (!existsSync(userDataPath)) {
       mkdirSync(userDataPath, { recursive: true });
     }
