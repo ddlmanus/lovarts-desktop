@@ -55,14 +55,42 @@ function getBaseFamily(modelId: string): string {
 
 function getVideoGroupKey(modelId: string): string {
   const lower = modelId.toLowerCase();
-  const family = getModelFamily(modelId);
-  if (lower.includes("seedance-2.0") && lower.includes("turbo")) {
-    return "bytedance/seedance-2.0-turbo";
+  const parts = modelId.split("/");
+  const provider = parts[0] || modelId;
+  const family = parts[1] || "";
+
+  if (
+    lower.startsWith("bytedance/seedance-2.0") ||
+    lower.startsWith("bytedance/seedance-v2")
+  ) {
+    return "bytedance/seedance-2.0";
   }
-  if (lower.includes("seedance-v2.0") && lower.includes("turbo")) {
-    return "bytedance/seedance-v2.0-turbo";
+  if (lower.startsWith("bytedance/seedance-v1.5-pro")) {
+    return "bytedance/seedance-v1.5-pro";
   }
-  return getBaseFamily(family);
+
+  if (provider === "kwaivgi") {
+    const normalizedKling = family
+      .replace(/-4k$/i, "")
+      .replace(/-pro$/i, "")
+      .replace(/-std$/i, "")
+      .replace(/-standard$/i, "")
+      .replace(/-master$/i, "");
+    if (normalizedKling !== family && normalizedKling.includes("kling")) {
+      return `${provider}/${normalizedKling}`;
+    }
+  }
+
+  if (provider === "openai" && family.startsWith("sora-2")) {
+    return "openai/sora-2";
+  }
+
+  if (provider === "google") {
+    if (family === "veo3-fast") return "google/veo3";
+    if (family === "veo3.1-fast") return "google/veo3.1";
+  }
+
+  return `${provider}/${family.replace(/-fast$/i, "")}`;
 }
 
 function getAvatarGroupKey(modelId: string): string {
@@ -332,6 +360,26 @@ function getVideoSortRank(model: Model): number {
   return rank === -1 ? 1000 : rank;
 }
 
+function getVideoRepresentativeRank(model: Model): number {
+  const id = model.model_id.toLowerCase();
+  const type = (model.type || "").toLowerCase();
+
+  if (type.includes("text-to-video") || id.includes("text-to-video")) return 0;
+  if (type.includes("image-to-video") || id.includes("image-to-video"))
+    return 1;
+  if (id.includes("reference-to-video")) return 2;
+  if (id.includes("start-end-to-video") || id.includes("start-end-frame"))
+    return 3;
+  if (
+    type.includes("video-to-video") ||
+    id.includes("video-edit") ||
+    id.includes("edit-video")
+  )
+    return 4;
+  if (type.includes("video-extend") || id.includes("video-extend")) return 5;
+  return 10;
+}
+
 function getAvatarSortRank(model: Model): number {
   const name = normalizeDisplayName(getAvatarDisplayName(model));
   const rank = AVATAR_MODEL_ORDER.findIndex((item) => name.includes(item));
@@ -564,19 +612,23 @@ export function ModelSelector({
   }, [models]);
 
   const videoFamilyModels = useMemo(() => {
-    const seen = new Set<string>();
-    return models
-      .filter((model) => {
-        const key = getVideoGroupKey(model.model_id);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .sort((a, b) => {
-        const rankDiff = getVideoSortRank(a) - getVideoSortRank(b);
-        if (rankDiff !== 0) return rankDiff;
-        return getVideoDisplayName(a).localeCompare(getVideoDisplayName(b));
-      });
+    const bestByFamily = new Map<string, Model>();
+    for (const model of models) {
+      const key = getVideoGroupKey(model.model_id);
+      const current = bestByFamily.get(key);
+      if (
+        !current ||
+        getVideoRepresentativeRank(model) < getVideoRepresentativeRank(current)
+      ) {
+        bestByFamily.set(key, model);
+      }
+    }
+
+    return Array.from(bestByFamily.values()).sort((a, b) => {
+      const rankDiff = getVideoSortRank(a) - getVideoSortRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return getVideoDisplayName(a).localeCompare(getVideoDisplayName(b));
+    });
   }, [models]);
 
   const avatarFamilyModels = useMemo(() => {

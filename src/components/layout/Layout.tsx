@@ -124,9 +124,6 @@ const LazyFaceSwapperPage = lazy(() =>
 const LazyHistoryPage = lazy(() =>
   import("@/pages/HistoryPage").then((m) => ({ default: m.HistoryPage })),
 );
-const LazyAssetsPage = lazy(() =>
-  import("@/pages/AssetsPage").then((m) => ({ default: m.AssetsPage })),
-);
 const LazyXiaohongshuGeneratorPage = lazy(() =>
   import("@/pages/XiaohongshuGeneratorPage").then((m) => ({
     default: m.XiaohongshuGeneratorPage,
@@ -142,7 +139,6 @@ const isElectron = navigator.userAgent.toLowerCase().includes("electron");
 // Hoisted constants — avoid re-creation on every render
 const PERSISTENT_PATHS = [
   "/history",
-  "/assets",
   "/xiaohongshu",
   "/free-tools/video-enhancer",
   "/free-tools/video-watermark-remover",
@@ -290,7 +286,6 @@ export function Layout() {
     "/",
     "/settings",
     "/templates",
-    "/assets",
     "/free-tools",
     "/z-image",
   ];
@@ -520,13 +515,6 @@ export function Layout() {
                     pageKey={pageKeys["/history"] || 0}
                   >
                     <LazyHistoryPage key={pageKeys["/history"] || 0} />
-                  </PersistentPage>
-                  <PersistentPage
-                    visited={hasVisited("/assets")}
-                    active={location.pathname === "/assets"}
-                    pageKey={pageKeys["/assets"] || 0}
-                  >
-                    <LazyAssetsPage key={pageKeys["/assets"] || 0} />
                   </PersistentPage>
                   <PersistentPage
                     visited={hasVisited("/xiaohongshu")}

@@ -18,7 +18,6 @@ import {
   Zap,
   PanelLeftClose,
   PanelLeft,
-  FolderHeart,
   Sparkles,
   GitBranch,
   Layers,
@@ -56,7 +55,6 @@ const createItems: NavItem[] = [
 const manageItems: NavItem[] = [
   { titleKey: "nav.templates", href: "/templates", icon: FolderOpen },
   { titleKey: "nav.history", href: "/history", icon: History },
-  { titleKey: "nav.assets", href: "/assets", icon: FolderHeart },
 ];
 
 const toolsItems: NavItem[] = [
@@ -193,12 +191,6 @@ export const Sidebar = memo(function Sidebar({
 
   const secondaryRailItems: NavItem[] = [
     { titleKey: "nav.history", label: "历史", href: "/history", icon: History },
-    {
-      titleKey: "nav.assets",
-      label: "资产",
-      href: "/assets",
-      icon: FolderHeart,
-    },
     { titleKey: "nav.zImage", label: "Z-Image", href: "/z-image", icon: Zap },
   ];
 

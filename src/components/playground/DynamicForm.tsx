@@ -157,6 +157,26 @@ function getSettingsField(field: FormFieldConfig) {
   };
 }
 
+function isVideoModel(model: Model) {
+  const haystack = `${model.type ?? ""} ${model.model_id}`.toLowerCase();
+  return haystack.includes("video");
+}
+
+function isCompactVideoMediaField(model: Model, field: FormFieldConfig) {
+  if (!isVideoModel(model)) return false;
+  if (field.type !== "file" && field.type !== "file-array") return false;
+
+  const name = field.name.toLowerCase();
+  if (name.includes("mask")) return false;
+
+  const haystack = `${name} ${field.label} ${field.accept ?? ""}`.toLowerCase();
+  return (
+    haystack.includes("image") ||
+    haystack.includes("video") ||
+    haystack.includes("audio")
+  );
+}
+
 export function DynamicForm({
   model,
   values,
@@ -313,6 +333,7 @@ export function DynamicForm({
                 formValues={values}
                 onUploadingChange={onUploadingChange}
                 tooltipDescription
+                compact={isCompactVideoMediaField(model, field)}
               />
             </div>
           )}
@@ -343,6 +364,7 @@ export function DynamicForm({
             formValues={values}
             onUploadingChange={onUploadingChange}
             tooltipDescription
+            compact={isCompactVideoMediaField(model, field)}
           />
         </div>
       );
@@ -362,6 +384,7 @@ export function DynamicForm({
         }
         formValues={values}
         onUploadingChange={onUploadingChange}
+        compact={isCompactVideoMediaField(model, field)}
       />
     );
   };

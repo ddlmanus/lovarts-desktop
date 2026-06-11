@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { ModelsPage } from "@/pages/ModelsPage";
 import { TemplatesPage } from "@/pages/TemplatesPage";
@@ -9,7 +9,7 @@ import { VideoGeneratorPage } from "@/pages/VideoGeneratorPage";
 import { AvatarGeneratorPage } from "@/pages/AvatarGeneratorPage";
 import { AudioGeneratorPage } from "@/pages/AudioGeneratorPage";
 import { ThreeDGeneratorPage } from "@/pages/ThreeDGeneratorPage";
-// HistoryPage and AssetsPage are rendered persistently in Layout
+// HistoryPage is rendered persistently in Layout
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SmartPlaygroundPage } from "@/pages/SmartPlaygroundPage";
 import { FreeToolsPage } from "@/pages/FreeToolsPage";
@@ -84,7 +84,7 @@ function App() {
         <Route path="3d/*" element={<ThreeDGeneratorPage />} />
         <Route path="templates" element={<TemplatesPage />} />
         <Route path="history" element={<PersistentPagePlaceholder />} />
-        <Route path="assets" element={<PersistentPagePlaceholder />} />
+        <Route path="assets" element={<Navigate to="/history" replace />} />
         <Route path="z-image" element={<PersistentPagePlaceholder />} />
         <Route path="free-tools" element={<FreeToolsPage />} />
         {/* Workflow page - persistent rendered */}

@@ -44,6 +44,7 @@ interface FileUploadProps {
   onUploadingChange?: (isUploading: boolean) => void;
   /** When provided (e.g. workflow), use this instead of API upload. Returned URL is stored as value. */
   onUploadFile?: (file: File) => Promise<string>;
+  compact?: boolean;
 }
 
 export function FileUpload({
@@ -57,6 +58,7 @@ export function FileUpload({
   formValues,
   onUploadingChange,
   onUploadFile,
+  compact = false,
 }: FileUploadProps) {
   const { t } = useTranslation();
   const [isUploading, setIsUploading] = useState(false);
@@ -318,6 +320,327 @@ export function FileUpload({
     },
     [urls, onChange, multiple],
   );
+
+  const getUrlMediaType = (url: string) => {
+    const decodedUrl = /^local-asset:\/\//i.test(url)
+      ? decodeURIComponent(url)
+      : url;
+    const hasImageExt = decodedUrl.match(
+      /\.(jpg|jpeg|png|gif|webp|bmp|svg|avif)(\?.*)?$/i,
+    );
+    const hasVideoExt = decodedUrl.match(/\.(mp4|webm|mov|avi|mkv)(\?.*)?$/i);
+    const hasAudioExt = decodedUrl.match(
+      /\.(mp3|wav|ogg|flac|aac|m4a)(\?.*)?$/i,
+    );
+    const acceptAll = accept === "*/*";
+
+    if (hasImageExt) return "image";
+    if (hasVideoExt) return "video";
+    if (hasAudioExt) return "audio";
+    if (!acceptAll && accept.includes("image")) return "image";
+    if (!acceptAll && accept.includes("video")) return "video";
+    if (!acceptAll && accept.includes("audio")) return "audio";
+    return "file";
+  };
+
+  const getUrlLabel = (url: string) => {
+    try {
+      const cleanUrl = url.split("?")[0];
+      const pathname = new URL(cleanUrl).pathname;
+      const filename = decodeURIComponent(pathname.split("/").pop() || "");
+      return filename || url;
+    } catch {
+      return decodeURIComponent(url.split("/").pop() || url);
+    }
+  };
+
+  if (compact) {
+    const FileIconComponent = getFileIcon();
+
+    return (
+      <div className="space-y-1.5">
+        {urls.length > 0 && (
+          <div className="space-y-1.5">
+            {urls.map((url, index) => {
+              const mediaType = getUrlMediaType(url);
+              const handlePreview = () => {
+                setPreviewUrl(url);
+                setPreviewType(
+                  mediaType === "image" ||
+                    mediaType === "video" ||
+                    mediaType === "audio"
+                    ? mediaType
+                    : null,
+                );
+              };
+
+              return (
+                <div
+                  key={`${url}-${index}`}
+                  className={cn(
+                    "group flex h-9 items-center gap-2 rounded-md border border-white/[0.06] bg-[#141414] px-2 transition-colors hover:border-white/12 hover:bg-white/[0.04]",
+                    draggingIndex === index && "opacity-60",
+                  )}
+                  draggable={multiple && !disabled}
+                  onDragStart={(e) => {
+                    if (!multiple || disabled) return;
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", String(index));
+                    setDraggingIndex(index);
+                  }}
+                  onDragOver={(e) => {
+                    if (!multiple || disabled) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (draggingIndex === null || draggingIndex === index)
+                      return;
+                    moveUrl(draggingIndex, index);
+                    setDraggingIndex(index);
+                  }}
+                  onDrop={(e) => {
+                    if (!multiple || disabled) return;
+                    e.preventDefault();
+                    setDraggingIndex(null);
+                  }}
+                  onDragEnd={() => setDraggingIndex(null)}
+                >
+                  <button
+                    type="button"
+                    onClick={handlePreview}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded bg-white/[0.06] text-muted-foreground">
+                      {mediaType === "image" ? (
+                        <img
+                          src={url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : mediaType === "video" ? (
+                        <FileVideo className="h-3.5 w-3.5" />
+                      ) : mediaType === "audio" ? (
+                        <FileAudio className="h-3.5 w-3.5" />
+                      ) : (
+                        <FileIconComponent className="h-3.5 w-3.5" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs text-[#d1d5db]">
+                      {getUrlLabel(url)}
+                    </span>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 text-muted-foreground hover:bg-white/[0.06] hover:text-destructive"
+                    onClick={() => removeFile(index)}
+                    disabled={disabled}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {canAddMore && (
+          <div className="space-y-1.5">
+            {captureMode === "camera" && (
+              <CameraCapture
+                onCapture={handleCapture}
+                onClose={() => setCaptureMode("upload")}
+                disabled={disabled || isUploading}
+              />
+            )}
+            {captureMode === "video" && (
+              <VideoRecorder
+                onRecord={handleCapture}
+                onClose={() => setCaptureMode("upload")}
+                disabled={disabled || isUploading}
+              />
+            )}
+            {captureMode === "audio" && (
+              <AudioRecorder
+                onRecord={handleCapture}
+                onClose={() => setCaptureMode("upload")}
+                disabled={disabled || isUploading}
+              />
+            )}
+            {captureMode === "mask" && (
+              <MaskEditor
+                referenceImageUrl={referenceImageUrl}
+                referenceVideoUrl={referenceVideoUrl}
+                onComplete={handleCapture}
+                onClose={() => setCaptureMode("upload")}
+                disabled={disabled || isUploading}
+              />
+            )}
+
+            {captureMode === "upload" && (
+              <div className="flex items-center gap-1.5">
+                <div
+                  {...getRootProps()}
+                  className={cn(
+                    "flex h-9 w-28 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed border-white/[0.1] bg-[#141414] px-2 text-xs text-muted-foreground transition-colors",
+                    isDragActive &&
+                      "border-[hsl(var(--playground-accent))] bg-[hsl(var(--playground-accent)/0.08)] text-white",
+                    disabled && "cursor-not-allowed opacity-50",
+                    !disabled &&
+                      !isDragActive &&
+                      "hover:border-white/20 hover:bg-white/[0.04]",
+                  )}
+                >
+                  <input {...getInputProps()} />
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>
+                        {uploadProgress > 0 && uploadProgress < 100
+                          ? `${uploadProgress}%`
+                          : "上传中"}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>上传</span>
+                    </>
+                  )}
+                </div>
+                <Input
+                  type="url"
+                  placeholder="输入 URL..."
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddUrl()}
+                  disabled={disabled}
+                  className="h-9 min-w-0 flex-1 border-white/[0.06] bg-[#141414] text-xs text-white placeholder:text-muted-foreground"
+                />
+                {urlInput.trim() && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    onClick={handleAddUrl}
+                    disabled={disabled}
+                    className="h-9 w-9 shrink-0"
+                    title="添加 URL"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {hasCaptureOptions && (
+                  <div className="flex shrink-0 gap-1">
+                    {supportsCamera && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCaptureMode("camera")}
+                        disabled={disabled || isUploading}
+                        className="h-9 w-9 border-white/[0.06] bg-[#141414]"
+                        title={t("playground.capture.camera")}
+                      >
+                        <Camera className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {supportsVideo && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCaptureMode("video")}
+                        disabled={disabled || isUploading}
+                        className="h-9 w-9 border-white/[0.06] bg-[#141414]"
+                        title={t("playground.capture.record")}
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {supportsAudio && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCaptureMode("audio")}
+                        disabled={disabled || isUploading}
+                        className="h-9 w-9 border-white/[0.06] bg-[#141414]"
+                        title={t("playground.capture.audio")}
+                      >
+                        <Mic className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {supportsMask && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCaptureMode("mask")}
+                        disabled={disabled || isUploading}
+                        className="h-9 w-9 border-white/[0.06] bg-[#141414]"
+                        title={t("playground.capture.drawMask")}
+                      >
+                        <Brush className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isUploading && (
+          <div className="flex items-center gap-2">
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
+              <div
+                className="h-full rounded-full bg-[hsl(var(--playground-accent))] transition-all duration-200"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleCancelUpload}
+              className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+            >
+              {t("common.cancel")}
+            </Button>
+          </div>
+        )}
+
+        {error && <p className="text-xs text-destructive">{error}</p>}
+
+        <Dialog
+          open={!!previewUrl}
+          onOpenChange={(open) => !open && setPreviewUrl(null)}
+        >
+          <DialogContent className="max-w-4xl p-0 overflow-hidden">
+            {previewType === "image" && previewUrl && (
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="w-full h-auto max-h-[80vh] object-contain"
+              />
+            )}
+            {previewType === "video" && previewUrl && (
+              <video
+                src={previewUrl}
+                controls
+                autoPlay
+                className="w-full h-auto max-h-[80vh]"
+              />
+            )}
+            {previewType === "audio" && previewUrl && (
+              <div className="p-8">
+                <audio src={previewUrl} controls autoPlay className="w-full" />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">

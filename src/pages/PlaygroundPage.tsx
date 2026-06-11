@@ -176,6 +176,48 @@ function get3DFamilyKey(modelId: string): string {
   return getModelFamily(modelId);
 }
 
+function getVideoFamilyKey(modelId: string): string {
+  const parts = modelId.split("/");
+  const provider = parts[0] || modelId;
+  const family = parts[1] || "";
+  const id = modelId.toLowerCase();
+
+  if (provider === "bytedance") {
+    if (
+      id.startsWith("bytedance/seedance-2.0") ||
+      id.startsWith("bytedance/seedance-v2")
+    ) {
+      return "bytedance/seedance-2.0";
+    }
+    if (id.startsWith("bytedance/seedance-v1.5-pro")) {
+      return "bytedance/seedance-v1.5-pro";
+    }
+  }
+
+  if (provider === "kwaivgi") {
+    const normalizedKling = family
+      .replace(/-4k$/i, "")
+      .replace(/-pro$/i, "")
+      .replace(/-std$/i, "")
+      .replace(/-standard$/i, "")
+      .replace(/-master$/i, "");
+    if (normalizedKling !== family && normalizedKling.includes("kling")) {
+      return `${provider}/${normalizedKling}`;
+    }
+  }
+
+  if (provider === "openai" && family.startsWith("sora-2")) {
+    return "openai/sora-2";
+  }
+
+  if (provider === "google") {
+    if (family === "veo3-fast") return "google/veo3";
+    if (family === "veo3.1-fast") return "google/veo3.1";
+  }
+
+  return `${provider}/${family.replace(/-fast$/i, "")}`;
+}
+
 function extractModelFormFields(model: Model): FormFieldConfig[] {
   const apiSchemas = (model.api_schema as any)?.api_schemas as
     | Array<{
@@ -367,6 +409,264 @@ type ThreeDModeDefinition = {
   modelId: string;
   rank: number;
 };
+
+type VideoModeDefinition = {
+  mode: string;
+  speed: string;
+  quality: string;
+  modeLabelKey: string;
+  speedLabelKey: string;
+  qualityLabelKey: string;
+  modelId: string;
+  rank: number;
+};
+
+function hasAnyFieldName(fields: FormFieldConfig[], names: string[]) {
+  const fieldNames = new Set(fields.map((field) => field.name.toLowerCase()));
+  return names.some((name) => fieldNames.has(name));
+}
+
+function hasRequiredFieldName(fields: FormFieldConfig[], names: string[]) {
+  const requiredFieldNames = new Set(
+    fields
+      .filter((field) => field.required)
+      .map((field) => field.name.toLowerCase()),
+  );
+  return names.some((name) => requiredFieldNames.has(name));
+}
+
+function getVideoModeDefinition(model: Model): VideoModeDefinition {
+  const id = model.model_id.toLowerCase();
+  const modelType = (model.type ?? "").toLowerCase();
+  const fields = extractModelFormFields(model);
+
+  let mode = "text";
+  let modeLabelKey = "smartPlayground.modeTextToVideo";
+  let rank = 0;
+
+  if (
+    modelType.includes("video-extend") ||
+    id.includes("video-extend") ||
+    id.includes("extend-video")
+  ) {
+    mode = "extend";
+    modeLabelKey = "smartPlayground.modeVideoExtend";
+    rank = 5;
+  } else if (
+    modelType.includes("video-to-video") ||
+    id.includes("video-edit") ||
+    id.includes("edit-video") ||
+    id.includes("video-to-video")
+  ) {
+    mode = "edit";
+    modeLabelKey = "smartPlayground.modeVideoToVideo";
+    rank = 4;
+  } else if (
+    id.includes("start-end-to-video") ||
+    id.includes("start-end-frame") ||
+    hasRequiredFieldName(fields, [
+      "last_image",
+      "last_image_url",
+      "last_frame_image",
+      "last_frame_image_url",
+      "end_image",
+      "end_image_url",
+      "end_frame_image",
+      "end_frame_image_url",
+    ])
+  ) {
+    mode = "start-end";
+    modeLabelKey = "smartPlayground.modeStartEndToVideo";
+    rank = 3;
+  } else if (
+    id.includes("reference-to-video") ||
+    hasRequiredFieldName(fields, [
+      "reference_image",
+      "reference_images",
+      "reference_image_url",
+      "reference_image_urls",
+      "reference_video",
+      "reference_videos",
+      "reference_video_url",
+      "reference_video_urls",
+      "ref_videos",
+      "reference_urls",
+    ])
+  ) {
+    mode = "reference";
+    modeLabelKey = "smartPlayground.modeReferenceToVideo";
+    rank = 2;
+  } else if (
+    modelType.includes("image-to-video") ||
+    id.includes("image-to-video") ||
+    id.includes("/i2v") ||
+    hasAnyFieldName(fields, ["image", "image_url", "images", "image_urls"])
+  ) {
+    mode = "image";
+    modeLabelKey = "smartPlayground.modeImageToVideo";
+    rank = 1;
+  }
+
+  const speed = id.includes("turbo")
+    ? "turbo"
+    : id.includes("ultra-fast") ||
+        id.includes("-fast") ||
+        id.includes("/fast") ||
+        id.includes("flash")
+      ? "fast"
+      : "normal";
+  const speedLabelKey =
+    speed === "turbo"
+      ? "smartPlayground.speedTurbo"
+      : speed === "fast"
+        ? "smartPlayground.speedFast"
+        : "smartPlayground.speedNormal";
+
+  const quality = id.includes("4k")
+    ? "4k"
+    : id.includes("-pro") || id.includes("/pro")
+      ? "pro"
+      : id.includes("-std") ||
+          id.includes("standard") ||
+          id.includes("/std") ||
+          id.includes("/standard")
+        ? "standard"
+        : id.includes("lite")
+          ? "lite"
+          : "default";
+  const qualityLabelKey =
+    quality === "4k"
+      ? "smartPlayground.quality4k"
+      : quality === "pro"
+        ? "smartPlayground.qualityPro"
+        : quality === "standard"
+          ? "smartPlayground.qualityStd"
+          : quality === "lite"
+            ? "smartPlayground.qualityLite"
+            : "smartPlayground.qualityDefault";
+
+  return {
+    mode,
+    speed,
+    quality,
+    modeLabelKey,
+    speedLabelKey,
+    qualityLabelKey,
+    modelId: model.model_id,
+    rank,
+  };
+}
+
+function buildDynamicVideoSmartFamily(
+  models: Model[],
+  selectedModel?: Model | null,
+): SmartFormFamily | undefined {
+  if (!selectedModel) return undefined;
+  const familyKey = getVideoFamilyKey(selectedModel.model_id);
+  const familyModels = models.filter(
+    (model) => getVideoFamilyKey(model.model_id) === familyKey,
+  );
+  if (familyModels.length <= 1) return undefined;
+
+  const modeDefinitions = familyModels
+    .map(getVideoModeDefinition)
+    .sort(
+      (a, b) =>
+        a.rank - b.rank ||
+        a.speed.localeCompare(b.speed) ||
+        a.quality.localeCompare(b.quality) ||
+        a.modelId.localeCompare(b.modelId),
+    );
+  const selectedDefinition =
+    modeDefinitions.find((mode) => mode.modelId === selectedModel.model_id) ??
+    modeDefinitions[0];
+  const uniqueModes = Array.from(
+    new Map(modeDefinitions.map((mode) => [mode.mode, mode])).values(),
+  );
+  const uniqueSpeeds = Array.from(
+    new Map(modeDefinitions.map((mode) => [mode.speed, mode])).values(),
+  );
+  const uniqueQualities = Array.from(
+    new Map(modeDefinitions.map((mode) => [mode.quality, mode])).values(),
+  ).filter((mode) => mode.quality !== "default");
+
+  const pickModel = (mode: string, speed: string, quality: string): string => {
+    const byMode = modeDefinitions.filter((item) => item.mode === mode);
+    const scoped = byMode.length > 0 ? byMode : modeDefinitions;
+    return (
+      scoped.find((item) => item.speed === speed && item.quality === quality)
+        ?.modelId ??
+      scoped.find((item) => item.speed === speed)?.modelId ??
+      scoped.find((item) => item.quality === quality)?.modelId ??
+      scoped[0]?.modelId ??
+      selectedModel.model_id
+    );
+  };
+
+  return {
+    id: `video:${familyKey}`,
+    name: formatModelTitle(familyKey.split("/").pop() ?? selectedModel.name),
+    provider: selectedModel.model_id.split("/")[0] || "video",
+    poster: "",
+    category: "video",
+    variantIds: familyModels.map((model) => model.model_id),
+    primaryVariant:
+      modeDefinitions.find((mode) => mode.mode === "text")?.modelId ??
+      modeDefinitions[0]?.modelId ??
+      selectedModel.model_id,
+    toggles: [
+      ...(uniqueSpeeds.length > 1
+        ? [
+            {
+              key: "speed",
+              labelKey: "smartPlayground.toggleSpeed",
+              options: uniqueSpeeds.map((mode) => ({
+                value: mode.speed,
+                labelKey: mode.speedLabelKey,
+              })),
+              default: selectedDefinition.speed,
+            },
+          ]
+        : []),
+      ...(uniqueQualities.length > 1
+        ? [
+            {
+              key: "quality",
+              labelKey: "smartPlayground.toggleQuality",
+              options: uniqueQualities.map((mode) => ({
+                value: mode.quality,
+                labelKey: mode.qualityLabelKey,
+              })),
+              default:
+                selectedDefinition.quality === "default"
+                  ? uniqueQualities[0]?.quality
+                  : selectedDefinition.quality,
+            },
+          ]
+        : []),
+      ...(uniqueModes.length > 1
+        ? [
+            {
+              key: "mode",
+              labelKey: "smartPlayground.toggleMode",
+              options: uniqueModes.map((mode) => ({
+                value: mode.mode,
+                labelKey: mode.modeLabelKey,
+              })),
+              default: selectedDefinition.mode,
+            },
+          ]
+        : []),
+    ],
+    resolveVariant(_filledFields, toggleValues) {
+      return pickModel(
+        toggleValues.mode ?? selectedDefinition.mode,
+        toggleValues.speed ?? selectedDefinition.speed,
+        toggleValues.quality ?? selectedDefinition.quality,
+      );
+    },
+  };
+}
 
 function get3DModeDefinition(model: Model): ThreeDModeDefinition {
   const id = model.model_id.toLowerCase();
@@ -935,6 +1235,7 @@ function buildNormalizedInput(
   fields: FormFieldConfig[],
 ): Record<string, unknown> {
   const cleanedInput: Record<string, unknown> = {};
+  const allowedFields = new Set(fields.map((field) => field.name));
   const integerFields = new Set(
     fields
       .filter((field) => field.schemaType === "integer")
@@ -942,6 +1243,7 @@ function buildNormalizedInput(
   );
 
   for (const [key, value] of Object.entries(values)) {
+    if (fields.length > 0 && !allowedFields.has(key)) continue;
     if (
       value !== "" &&
       value !== undefined &&
@@ -1258,6 +1560,7 @@ function tuneInfiniteTalkFields(
 function getSmartToggleFallback(labelKey: string, value: string): string {
   if (labelKey.endsWith("modeGenerate")) return "生成";
   if (labelKey.endsWith("modeEdit")) return "编辑";
+  if (labelKey.endsWith("modeTextToVideo")) return "文生视频";
   if (labelKey.endsWith("modeTextToSpeech")) return "文字转语音";
   if (labelKey.endsWith("modeVoiceClone")) return "音色克隆";
   if (labelKey.endsWith("modeVoiceDesign")) return "音色设计";
@@ -1270,11 +1573,18 @@ function getSmartToggleFallback(labelKey: string, value: string): string {
   if (labelKey.endsWith("modeSketch")) return "草图";
   if (labelKey.endsWith("modeMultiView")) return "多视图";
   if (labelKey.endsWith("modeImageToVideo")) return "图生视频";
+  if (labelKey.endsWith("modeReferenceToVideo")) return "参考生成";
+  if (labelKey.endsWith("modeStartEndToVideo")) return "首尾帧";
   if (labelKey.endsWith("modeVideoToVideo")) return "视频生视频";
+  if (labelKey.endsWith("modeVideoExtend")) return "视频扩展";
   if (labelKey.endsWith("qualityStd")) return "标准";
   if (labelKey.endsWith("speedFast")) return "快速";
+  if (labelKey.endsWith("speedTurbo")) return "极速";
   if (labelKey.endsWith("speedNormal")) return "标准";
   if (labelKey.endsWith("qualityPro")) return "专业";
+  if (labelKey.endsWith("quality4k")) return "4K";
+  if (labelKey.endsWith("qualityLite")) return "轻量";
+  if (labelKey.endsWith("qualityDefault")) return "默认";
   return value;
 }
 
@@ -1606,6 +1916,12 @@ export function PlaygroundPage({
   const pricingModelRef = useRef<string | null>(null);
 
   const activeSmartFamily = useMemo(() => {
+    if (workspace === "video") {
+      return buildDynamicVideoSmartFamily(
+        filteredModels,
+        activeTab?.selectedModel,
+      );
+    }
     if (workspace === "audio") {
       return buildDynamicAudioSmartFamily(
         filteredModels,
@@ -1690,6 +2006,9 @@ export function PlaygroundPage({
 
   const smartVisibleFields = useMemo(() => {
     if (!activeSmartFamily || smartVariantModels.length === 0) return undefined;
+    if (activeSmartFamily.category === "video" && smartResolvedModel) {
+      return extractModelFormFields(smartResolvedModel);
+    }
     if (activeSmartFamily.category === "3d" && smartResolvedModel) {
       return tune3DFields(
         extractModelFormFields(smartResolvedModel),

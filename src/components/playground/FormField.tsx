@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { FormFieldConfig } from "@/lib/schemaToForm";
@@ -13,8 +19,27 @@ import { LoraSelector, type LoraItem } from "./LoraSelector";
 import { ObjectArrayField } from "./ObjectArrayField";
 import { PromptOptimizer } from "./PromptOptimizer";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronDown, Dices, Info, Plus, Trash2 } from "lucide-react";
+import {
+  AtSign,
+  Check,
+  ChevronDown,
+  Dices,
+  FileAudio,
+  FileIcon,
+  FileVideo,
+  Info,
+  Maximize2,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface FormFieldProps {
   field: FormFieldConfig;
@@ -81,6 +106,265 @@ function AspectRatioPreview({ ratio }: { ratio: string }) {
         className="rounded-[3px] border border-current/85"
         style={{ width, height }}
       />
+    </span>
+  );
+}
+
+type PromptReference = {
+  id: string;
+  fieldName: string;
+  label: string;
+  baseLabel: string;
+  type: "image" | "video" | "audio" | "file";
+  url: string;
+  index: number;
+  total: number;
+};
+
+function getPromptReferenceLabel(name: string) {
+  const normalized = name.toLowerCase();
+  const labels: Record<string, string> = {
+    image: "图像",
+    images: "图像",
+    image_url: "图像",
+    image_urls: "图像",
+    input_image: "图像",
+    input_images: "图像",
+    input_image_url: "图像",
+    input_image_urls: "图像",
+    start_image: "起始图像",
+    start_image_url: "起始图像",
+    first_frame_image: "起始图像",
+    first_frame_image_url: "起始图像",
+    end_image: "末帧图像",
+    end_image_url: "末帧图像",
+    last_image: "末帧图像",
+    last_image_url: "末帧图像",
+    last_frame_image: "末帧图像",
+    last_frame_image_url: "末帧图像",
+    reference_image: "参考图像",
+    reference_images: "参考图像",
+    reference_image_url: "参考图像",
+    reference_image_urls: "参考图像",
+    video: "视频",
+    videos: "视频",
+    video_url: "视频",
+    video_urls: "视频",
+    input_video: "视频",
+    input_videos: "视频",
+    input_video_url: "视频",
+    input_video_urls: "视频",
+    reference_video: "参考视频",
+    reference_videos: "参考视频",
+    reference_video_url: "参考视频",
+    reference_video_urls: "参考视频",
+    audio: "音频",
+    audios: "音频",
+    audio_url: "音频",
+    audio_urls: "音频",
+    input_audio: "音频",
+    input_audios: "音频",
+    input_audio_url: "音频",
+    input_audio_urls: "音频",
+    reference_audio: "参考音频",
+    reference_audios: "参考音频",
+    reference_audio_url: "参考音频",
+    reference_audio_urls: "参考音频",
+  };
+
+  if (labels[normalized]) return labels[normalized];
+  if (normalized.includes("start") || normalized.includes("first"))
+    return "起始图像";
+  if (normalized.includes("end") || normalized.includes("last"))
+    return "末帧图像";
+  if (normalized.includes("reference") && normalized.includes("image"))
+    return "参考图像";
+  if (normalized.includes("reference") && normalized.includes("video"))
+    return "参考视频";
+  if (normalized.includes("reference") && normalized.includes("audio"))
+    return "参考音频";
+  if (normalized.includes("image")) return "图像";
+  if (normalized.includes("video")) return "视频";
+  if (normalized.includes("audio")) return "音频";
+  return "素材";
+}
+
+function getPromptReferenceType(
+  name: string,
+  value: unknown,
+): PromptReference["type"] | null {
+  const normalized = name.toLowerCase();
+  const values = Array.isArray(value) ? value : [value];
+  const joined = values.filter(Boolean).join(" ").toLowerCase();
+
+  if (
+    normalized.includes("image") ||
+    /\.(jpg|jpeg|png|webp|gif|avif)/.test(joined)
+  ) {
+    return "image";
+  }
+  if (normalized.includes("video") || /\.(mp4|webm|mov|mkv|avi)/.test(joined)) {
+    return "video";
+  }
+  if (
+    normalized.includes("audio") ||
+    /\.(mp3|wav|ogg|m4a|flac|aac)/.test(joined)
+  ) {
+    return "audio";
+  }
+  return null;
+}
+
+function getPromptReferenceTypeLabel(type: PromptReference["type"]) {
+  const labels: Record<PromptReference["type"], string> = {
+    image: "图像",
+    video: "视频",
+    audio: "音频",
+    file: "文件",
+  };
+  return labels[type];
+}
+
+function getPromptReferenceValue(value: unknown) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const candidates = [
+      record.url,
+      record.uri,
+      record.src,
+      record.image,
+      record.image_url,
+      record.video,
+      record.video_url,
+      record.audio,
+      record.audio_url,
+    ];
+    const found = candidates.find(
+      (candidate) =>
+        typeof candidate === "string" && candidate.trim().length > 0,
+    );
+    return typeof found === "string" ? found.trim() : null;
+  }
+
+  return null;
+}
+
+function getPromptReferences(
+  formValues?: Record<string, unknown>,
+): PromptReference[] {
+  if (!formValues) return [];
+
+  const references = Object.entries(formValues).flatMap(
+    ([fieldName, value]) => {
+      const values = Array.isArray(value) ? value : [value];
+      const urls = values
+        .map(getPromptReferenceValue)
+        .filter(Boolean) as string[];
+      if (urls.length === 0) return [];
+
+      const baseLabel = getPromptReferenceLabel(fieldName);
+      return urls.flatMap((url, index) => {
+        const type = getPromptReferenceType(fieldName, url);
+        if (!type) return [];
+
+        return {
+          id: `${fieldName}-${index}-${url}`,
+          fieldName,
+          baseLabel,
+          label: baseLabel,
+          type,
+          url,
+          index,
+          total: urls.length,
+        };
+      });
+    },
+  );
+
+  const labelCounts = references.reduce<Record<string, number>>(
+    (counts, reference) => {
+      counts[reference.baseLabel] = (counts[reference.baseLabel] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
+  const labelIndexes: Record<string, number> = {};
+
+  return references.map((reference) => {
+    const total = labelCounts[reference.baseLabel] ?? 1;
+    if (total <= 1) return { ...reference, total };
+
+    labelIndexes[reference.baseLabel] =
+      (labelIndexes[reference.baseLabel] ?? 0) + 1;
+
+    return {
+      ...reference,
+      label: `${reference.baseLabel} ${labelIndexes[reference.baseLabel]}`,
+      total,
+    };
+  });
+}
+
+function PromptReferenceThumb({
+  reference,
+  size = "md",
+}: {
+  reference: PromptReference;
+  size?: "sm" | "md";
+}) {
+  const thumbClassName = cn(
+    "shrink-0 overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.04]",
+    size === "sm" ? "h-6 w-6" : "h-10 w-10",
+  );
+  const iconClassName = cn(
+    "text-muted-foreground",
+    size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4",
+  );
+
+  if (reference.type === "image") {
+    return (
+      <span className={cn("relative", thumbClassName)}>
+        <img
+          src={reference.url}
+          alt=""
+          className="h-full w-full object-cover"
+          draggable={false}
+        />
+      </span>
+    );
+  }
+
+  if (reference.type === "video") {
+    return (
+      <span className={cn("relative bg-black", thumbClassName)}>
+        <video
+          src={reference.url}
+          className="h-full w-full object-cover"
+          muted
+          playsInline
+          preload="metadata"
+        />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <FileVideo
+            className={cn(
+              size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4",
+              "text-white",
+            )}
+          />
+        </span>
+      </span>
+    );
+  }
+
+  const Icon = reference.type === "audio" ? FileAudio : FileIcon;
+  return (
+    <span className={cn("flex items-center justify-center", thumbClassName)}>
+      <Icon className={iconClassName} />
     </span>
   );
 }
@@ -552,6 +836,20 @@ export function FormField({
     if (allowEmptyNumber && (value === undefined || value === null)) return "";
     return String(numericFallback);
   });
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [promptReferencesOpen, setPromptReferencesOpen] = useState(false);
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [promptDraft, setPromptDraft] = useState("");
+  const promptReferences = useMemo(
+    () => getPromptReferences(formValues),
+    [formValues],
+  );
+
+  useEffect(() => {
+    if (promptEditorOpen) {
+      setPromptDraft((value as string) || "");
+    }
+  }, [promptEditorOpen, value]);
 
   useEffect(() => {
     if (!isNumericField) return;
@@ -594,6 +892,194 @@ export function FormField({
     setNumericInput(String(clamped));
   };
 
+  const insertPromptReference = (reference: PromptReference) => {
+    const currentValue = (value as string) || "";
+    const textarea = textareaRef.current;
+    const cursor = textarea?.selectionStart ?? currentValue.length;
+    const selectionEnd = textarea?.selectionEnd ?? cursor;
+    const beforeCursor = currentValue.slice(0, cursor);
+    const atIndex = beforeCursor.lastIndexOf("@");
+    const shouldReplaceAt =
+      atIndex >= 0 && !/\s/.test(beforeCursor.slice(atIndex + 1));
+    const start = shouldReplaceAt ? atIndex : cursor;
+    const token = `@${reference.label} `;
+    const nextValue =
+      currentValue.slice(0, start) + token + currentValue.slice(selectionEnd);
+
+    onChange(nextValue);
+    setPromptReferencesOpen(false);
+
+    window.requestAnimationFrame(() => {
+      textarea?.focus();
+      const nextCursor = start + token.length;
+      textarea?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const handlePromptChange = (nextValue: string) => {
+    onChange(nextValue);
+    const textarea = textareaRef.current;
+    const cursor = textarea?.selectionStart ?? nextValue.length;
+    const beforeCursor = nextValue.slice(0, cursor);
+    setPromptReferencesOpen(/(^|\s)@\S*$/.test(beforeCursor));
+  };
+
+  const renderPromptReferenceMenu = () => {
+    if (!promptReferencesOpen) return null;
+
+    return (
+      <div className="absolute right-2 top-11 z-30 w-[min(320px,calc(100%-1rem))] overflow-hidden rounded-lg border border-white/[0.08] bg-[#111] p-1.5 shadow-[0_18px_42px_rgba(0,0,0,0.45)]">
+        {promptReferences.length > 0 ? (
+          promptReferences.map((reference) => (
+            <button
+              key={reference.id}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => insertPromptReference(reference)}
+              className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
+            >
+              <PromptReferenceThumb reference={reference} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-white">
+                  {reference.label}
+                </span>
+                <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <AtSign className="h-3 w-3" />
+                  {getPromptReferenceTypeLabel(reference.type)}
+                </span>
+              </span>
+            </button>
+          ))
+        ) : (
+          <div className="px-2.5 py-2 text-xs text-muted-foreground">
+            先上传参考素材
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderPromptInput = () => (
+    <>
+      <div className="relative">
+        <Textarea
+          ref={textareaRef}
+          id={field.name}
+          value={(value as string) || ""}
+          onChange={(e) => handlePromptChange(e.target.value)}
+          onFocus={() => {
+            const currentValue = (value as string) || "";
+            const cursor = textareaRef.current?.selectionStart ?? 0;
+            const beforeCursor = currentValue.slice(0, cursor);
+            if (/(^|\s)@\S*$/.test(beforeCursor)) {
+              setPromptReferencesOpen(true);
+            }
+          }}
+          onBlur={() => {
+            window.setTimeout(() => setPromptReferencesOpen(false), 120);
+          }}
+          placeholder={field.description || `请输入${field.label}`}
+          disabled={disabled}
+          rows={field.name === "prompt" ? 7 : 4}
+          className="nodrag nowheel resize-y pr-20"
+        />
+        <div className="absolute right-2 top-2 flex gap-1">
+          {field.name === "prompt" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setPromptReferencesOpen((open) => !open)}
+              disabled={disabled}
+              className="h-7 w-7 rounded-md bg-black/20 text-muted-foreground hover:bg-white/[0.08] hover:text-white"
+              title="引用素材"
+            >
+              <AtSign className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setPromptEditorOpen(true)}
+            disabled={disabled}
+            className="h-7 w-7 rounded-md bg-black/20 text-muted-foreground hover:bg-white/[0.08] hover:text-white"
+            title="放大编辑"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        {renderPromptReferenceMenu()}
+      </div>
+
+      <Dialog open={promptEditorOpen} onOpenChange={setPromptEditorOpen}>
+        <DialogContent className="max-w-3xl border-white/[0.08] bg-[#111] text-white">
+          <DialogHeader>
+            <DialogTitle className="text-base">编辑提示词</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={promptDraft}
+            onChange={(event) => setPromptDraft(event.target.value)}
+            placeholder={field.description || `请输入${field.label}`}
+            disabled={disabled}
+            rows={14}
+            className="min-h-[360px] resize-none border-white/[0.08] bg-[#0b0b0b] text-sm text-white placeholder:text-muted-foreground"
+          />
+          {field.name === "prompt" && promptReferences.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {promptReferences.map((reference) => (
+                <button
+                  key={reference.id}
+                  type="button"
+                  onClick={() =>
+                    setPromptDraft(
+                      (current) => `${current}@${reference.label} `,
+                    )
+                  }
+                  className="flex items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.03] py-1 pl-1 pr-2 text-xs text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-white"
+                >
+                  <PromptReferenceThumb reference={reference} size="sm" />
+                  <span>@{reference.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:space-x-0">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setPromptDraft("")}
+              disabled={disabled}
+              className="text-muted-foreground hover:text-white"
+            >
+              清空
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPromptEditorOpen(false)}
+              className="border-white/[0.08] bg-transparent text-[#d1d5db] hover:bg-white/[0.06] hover:text-white"
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                onChange(promptDraft);
+                setPromptEditorOpen(false);
+              }}
+              disabled={disabled}
+            >
+              应用
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+
   const renderInput = () => {
     switch (field.type) {
       case "text":
@@ -609,17 +1095,7 @@ export function FormField({
         );
 
       case "textarea":
-        return (
-          <Textarea
-            id={field.name}
-            value={(value as string) || ""}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={field.description || `请输入${field.label}`}
-            disabled={disabled}
-            rows={4}
-            className="nodrag nowheel"
-          />
-        );
+        return renderPromptInput();
 
       case "number": {
         // Show slider + input when default, min, and max are all defined
@@ -862,6 +1338,7 @@ export function FormField({
             formValues={formValues}
             onUploadingChange={onUploadingChange}
             onUploadFile={onUploadFile}
+            compact={compact}
           />
         );
 
