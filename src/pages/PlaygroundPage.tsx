@@ -18,11 +18,24 @@ import {
 } from "@/stores/playgroundStore";
 import { useModelsStore } from "@/stores/modelsStore";
 import { useApiKeyStore } from "@/stores/apiKeyStore";
-import { apiClient } from "@/api/client";
+import { DEFAULT_API_BASE_URL, apiClient } from "@/api/client";
 import { useTemplateStore } from "@/stores/templateStore";
 import { usePredictionInputsStore } from "@/stores/predictionInputsStore";
+import { useApiServiceStore } from "@/stores/apiServiceStore";
 import { usePageActive } from "@/hooks/usePageActive";
-import { getDefaultValues, normalizePayloadArrays } from "@/lib/schemaToForm";
+import {
+  getDefaultValues,
+  normalizePayloadArrays,
+  schemaToFormFields,
+  type FormFieldConfig,
+} from "@/lib/schemaToForm";
+import {
+  AUDIO_FIELD_NAMES,
+  IMAGE_FIELD_NAMES,
+  VIDEO_FIELD_NAMES,
+  findFamilyByVariantId,
+  getFilledFieldNames,
+} from "@/lib/smartFormConfig";
 import {
   applyDiscount,
   getModelDiscountRate,
@@ -63,7 +76,473 @@ import type { Model } from "@/types/model";
 
 type RightPanelTab = "result" | "featured" | "templates";
 
-/** Format raw model name/id for display. e.g. "google/nano-banana-pro/text-to-image" → "Google / Nano Banana Pro" */
+function getModelFamily(modelId: string): string {
+  const parts = modelId.split("/");
+  if (parts.length <= 2) return modelId;
+  return parts.slice(0, 2).join("/");
+}
+
+function getModelFamilyName(modelId: string): string {
+  const parts = getModelFamily(modelId).split("/");
+  return parts[1] || parts[0] || modelId;
+}
+
+function formatModelTitle(value: string): string {
+  return value
+    .split("-")
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (["ai", "api", "gpt", "sd", "xl", "hd", "uhd", "3d"].includes(lower)) {
+        return lower.toUpperCase();
+      }
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
+
+function getFriendlyModelName(model: Model | null | undefined): string {
+  if (!model) return "";
+  return formatModelTitle(getModelFamilyName(model.model_id));
+}
+
+function extractModelFormFields(model: Model): FormFieldConfig[] {
+  const apiSchemas = (model.api_schema as any)?.api_schemas as
+    | Array<{
+        type: string;
+        request_schema?: {
+          properties?: Record<string, unknown>;
+          required?: string[];
+          "x-order-properties"?: string[];
+        };
+      }>
+    | undefined;
+
+  const requestSchema = apiSchemas?.find(
+    (schema) => schema.type === "model_run",
+  )?.request_schema;
+  if (!requestSchema?.properties) return [];
+
+  return schemaToFormFields(
+    requestSchema.properties as Record<
+      string,
+      import("@/types/model").SchemaProperty
+    >,
+    requestSchema.required || [],
+    requestSchema["x-order-properties"],
+  );
+}
+
+function mergeVariantFormFields(
+  models: Model[],
+  primaryVariantId: string,
+): FormFieldConfig[] {
+  const primaryModel =
+    models.find((model) => model.model_id === primaryVariantId) ?? models[0];
+  if (!primaryModel) return [];
+
+  const result: FormFieldConfig[] = [];
+  const added = new Set<string>();
+  for (const field of extractModelFormFields(primaryModel)) {
+    result.push(field);
+    added.add(field.name);
+  }
+
+  for (const model of models) {
+    if (model.model_id === primaryModel.model_id) continue;
+    for (const field of extractModelFormFields(model)) {
+      if (added.has(field.name)) continue;
+      result.push({ ...field, required: false });
+      added.add(field.name);
+    }
+  }
+
+  return result;
+}
+
+function getVariantSuffix(modelId: string): string {
+  const parts = modelId.split("/");
+  return parts.length > 2 ? parts.slice(2).join("/") : "";
+}
+
+function findResolvedSmartModel(
+  models: Model[],
+  resolvedVariantId: string,
+  primaryVariantId: string,
+): Model | null {
+  const exact = models.find((model) => model.model_id === resolvedVariantId);
+  if (exact) return exact;
+
+  const suffix = getVariantSuffix(resolvedVariantId);
+  if (suffix) {
+    const suffixMatch = models.find((model) =>
+      model.model_id.endsWith(`/${suffix}`),
+    );
+    if (suffixMatch) return suffixMatch;
+  }
+
+  const primary = models.find((model) => model.model_id === primaryVariantId);
+  if (primary) return primary;
+
+  const primarySuffix = getVariantSuffix(primaryVariantId);
+  if (primarySuffix) {
+    const primarySuffixMatch = models.find((model) =>
+      model.model_id.endsWith(`/${primarySuffix}`),
+    );
+    if (primarySuffixMatch) return primarySuffixMatch;
+  }
+
+  return models[0] ?? null;
+}
+
+function filterValuesForFields(
+  values: Record<string, unknown>,
+  fields: FormFieldConfig[],
+): Record<string, unknown> {
+  if (fields.length === 0) return { ...values };
+  const allowed = new Set(fields.map((field) => field.name));
+  return Object.fromEntries(
+    Object.entries(values).filter(([key]) => allowed.has(key)),
+  );
+}
+
+function buildNormalizedInput(
+  values: Record<string, unknown>,
+  fields: FormFieldConfig[],
+): Record<string, unknown> {
+  const cleanedInput: Record<string, unknown> = {};
+  const integerFields = new Set(
+    fields
+      .filter((field) => field.schemaType === "integer")
+      .map((field) => field.name),
+  );
+
+  for (const [key, value] of Object.entries(values)) {
+    if (
+      value !== "" &&
+      value !== undefined &&
+      value !== null &&
+      !(Array.isArray(value) && value.length === 0)
+    ) {
+      cleanedInput[key] =
+        integerFields.has(key) && typeof value === "number"
+          ? Math.round(value)
+          : value;
+    }
+  }
+
+  return normalizePayloadArrays(cleanedInput, fields);
+}
+
+function isSmartTriggerField(
+  field: FormFieldConfig,
+  category: "image" | "video" | "other",
+): boolean {
+  const name = field.name.toLowerCase();
+  if (name.includes("mask")) return false;
+  const isImageField =
+    IMAGE_FIELD_NAMES.includes(name) ||
+    ((field.type === "file" || field.type === "file-array") &&
+      name.includes("image"));
+  const isVideoField =
+    VIDEO_FIELD_NAMES.includes(name) ||
+    ((field.type === "file" || field.type === "file-array") &&
+      name.includes("video"));
+  const isAudioField =
+    AUDIO_FIELD_NAMES.includes(name) ||
+    ((field.type === "file" || field.type === "file-array") &&
+      name.includes("audio"));
+
+  if (category === "image") return isImageField;
+  if (category === "video") return isImageField || isVideoField || isAudioField;
+  return isImageField || isVideoField || isAudioField;
+}
+
+function tuneSeedance20Fields(
+  fields: FormFieldConfig[],
+  mode: string,
+): FormFieldConfig[] {
+  const isEdit = mode === "edit";
+  const editVideoNames = [
+    "video",
+    "videos",
+    "video_url",
+    "video_urls",
+    "input_video",
+    "input_videos",
+    "input_video_url",
+    "input_video_urls",
+  ];
+  const genericAudioNames = [
+    "audio",
+    "audios",
+    "audio_url",
+    "audio_urls",
+    "input_audio",
+    "input_audios",
+    "input_audio_url",
+    "input_audio_urls",
+  ];
+  const hiddenNames = new Set(
+    isEdit
+      ? [
+          "image",
+          "images",
+          "image_url",
+          "image_urls",
+          "input_image",
+          "input_images",
+          "input_image_url",
+          "input_image_urls",
+          "first_frame_image",
+          "first_frame_image_url",
+          "last_image",
+          "last_image_url",
+          "last_frame_image",
+          "last_frame_image_url",
+          "start_image",
+          "start_image_url",
+          "end_image",
+          "end_image_url",
+          "reference_image",
+          "reference_images",
+          "reference_image_url",
+          "reference_image_urls",
+          "reference_video",
+          "reference_videos",
+          "reference_video_url",
+          "reference_video_urls",
+          "reference_audio",
+          "reference_audios",
+          "reference_audio_url",
+          "reference_audio_urls",
+          ...genericAudioNames,
+        ]
+      : [...editVideoNames, ...genericAudioNames],
+  );
+
+  const getCanonicalName = (field: FormFieldConfig) => {
+    const name = field.name.toLowerCase();
+    if (
+      [
+        "image",
+        "images",
+        "image_url",
+        "image_urls",
+        "input_image",
+        "input_images",
+        "input_image_url",
+        "input_image_urls",
+        "start_image",
+        "start_image_url",
+        "first_frame_image",
+        "first_frame_image_url",
+      ].includes(name)
+    ) {
+      return "seedance-start-image";
+    }
+    if (
+      [
+        "last_image",
+        "last_image_url",
+        "last_frame_image",
+        "last_frame_image_url",
+        "end_image",
+        "end_image_url",
+      ].includes(name)
+    ) {
+      return "seedance-end-image";
+    }
+    if (
+      [
+        "reference_image",
+        "reference_images",
+        "reference_image_url",
+        "reference_image_urls",
+      ].includes(name)
+    ) {
+      return "seedance-reference-image";
+    }
+    if (editVideoNames.includes(name)) return "seedance-edit-video";
+    if (genericAudioNames.includes(name)) return "seedance-audio";
+    return name;
+  };
+
+  const rank = (field: FormFieldConfig) => {
+    const name = field.name.toLowerCase();
+    const canonicalName = getCanonicalName(field);
+    if (name === "prompt") return 0;
+    if (canonicalName === "seedance-edit-video") return 1;
+    if (canonicalName === "seedance-start-image") return 1;
+    if (canonicalName === "seedance-end-image") return 2;
+    if (canonicalName === "seedance-reference-image") return 3;
+    if (
+      [
+        "reference_video",
+        "reference_videos",
+        "reference_video_url",
+        "reference_video_urls",
+      ].includes(name)
+    )
+      return 4;
+    if (
+      [
+        "reference_audio",
+        "reference_audios",
+        "reference_audio_url",
+        "reference_audio_urls",
+      ].includes(name)
+    )
+      return 5;
+    if (name.includes("aspect") || name === "resolution" || name === "duration")
+      return 10;
+    if (name.includes("web_search") || name.includes("generate_audio"))
+      return 11;
+    return 8;
+  };
+
+  return fields
+    .filter((field) => !hiddenNames.has(field.name.toLowerCase()))
+    .filter((field, index, visibleFields) => {
+      const canonicalName = getCanonicalName(field);
+      return (
+        visibleFields.findIndex(
+          (candidate) => getCanonicalName(candidate) === canonicalName,
+        ) === index
+      );
+    })
+    .map((field) => {
+      const name = field.name.toLowerCase();
+      if (getCanonicalName(field) === "seedance-edit-video") {
+        return {
+          ...field,
+          label: "待编辑视频",
+          description: "上传需要编辑的视频。",
+        };
+      }
+      if (getCanonicalName(field) === "seedance-start-image") {
+        return {
+          ...field,
+          label: "起始图像",
+          description: "可选，上传起始图后自动切换为图生视频。",
+        };
+      }
+      if (getCanonicalName(field) === "seedance-end-image") {
+        return {
+          ...field,
+          label: "末帧图像",
+          description: "可选，用于定义视频结束帧。",
+        };
+      }
+      if (getCanonicalName(field) === "seedance-reference-image") {
+        return {
+          ...field,
+          label: "参考图像",
+          description: "可选，用于引导视觉风格、人物或场景。",
+        };
+      }
+      if (
+        [
+          "reference_video",
+          "reference_videos",
+          "reference_video_url",
+          "reference_video_urls",
+        ].includes(name)
+      ) {
+        return {
+          ...field,
+          label: "参考视频",
+          description: "可选，总时长不能超过 15 秒。",
+        };
+      }
+      if (
+        [
+          "reference_audio",
+          "reference_audios",
+          "reference_audio_url",
+          "reference_audio_urls",
+        ].includes(name)
+      ) {
+        return {
+          ...field,
+          label: "参考音频",
+          description: "可选，用于声音引导的音频参考。",
+        };
+      }
+      return field;
+    })
+    .sort((a, b) => rank(a) - rank(b));
+}
+
+function tuneInfiniteTalkFields(
+  fields: FormFieldConfig[],
+  mode: string,
+): FormFieldConfig[] {
+  const isVideoMode = mode === "video";
+  const hiddenNames = new Set(
+    isVideoMode
+      ? [
+          "image",
+          "images",
+          "image_url",
+          "image_urls",
+          "input_image",
+          "input_images",
+          "input_image_url",
+          "input_image_urls",
+          "mask_image",
+          "mask_image_url",
+          "mask_images",
+          "mask_image_urls",
+        ]
+      : [
+          "video",
+          "videos",
+          "video_url",
+          "video_urls",
+          "input_video",
+          "input_videos",
+          "input_video_url",
+          "input_video_urls",
+        ],
+  );
+
+  const rank = (field: FormFieldConfig) => {
+    const name = field.name.toLowerCase();
+    if (name === "prompt") return 0;
+    if (name.includes("image") && !name.includes("mask")) return 1;
+    if (name.includes("video")) return 1;
+    if (name.includes("audio")) return 2;
+    if (name.includes("mask")) return 3;
+    return 8;
+  };
+
+  return fields
+    .filter((field) => !hiddenNames.has(field.name.toLowerCase()))
+    .sort((a, b) => rank(a) - rank(b));
+}
+
+function getSmartToggleFallback(labelKey: string, value: string): string {
+  if (labelKey.endsWith("modeGenerate")) return "生成";
+  if (labelKey.endsWith("modeEdit")) return "编辑";
+  if (labelKey.endsWith("modeImageToVideo")) return "图生视频";
+  if (labelKey.endsWith("modeVideoToVideo")) return "视频生视频";
+  if (labelKey.endsWith("qualityStd")) return "标准";
+  if (labelKey.endsWith("speedFast")) return "快速";
+  if (labelKey.endsWith("speedNormal")) return "标准";
+  if (labelKey.endsWith("qualityPro")) return "专业";
+  return value;
+}
+
+function canUseSmartFamilyForWorkspace(
+  category: "image" | "video" | "other" | undefined,
+  workspace: PlaygroundWorkspace,
+) {
+  return (
+    (workspace === "image" && category === "image") ||
+    (workspace === "video" && category === "video") ||
+    (workspace === "avatar" && category === "other")
+  );
+}
 
 const isCapacitorNative = () => {
   try {
@@ -161,6 +640,25 @@ function decodeModelIdFromPath(pathname: string, basePath: string) {
   }
 }
 
+function isOfficialWaveSpeedBaseUrl(baseUrl: string) {
+  try {
+    return new URL(baseUrl).hostname === "api.wavespeed.ai";
+  } catch {
+    return baseUrl.replace(/\/+$/, "") === DEFAULT_API_BASE_URL;
+  }
+}
+
+function isPredictionRunningStatus(status: string | undefined | null) {
+  return (
+    status === "created" ||
+    status === "pending" ||
+    status === "processing" ||
+    status === "queued" ||
+    status === "running" ||
+    status === "starting"
+  );
+}
+
 export function PlaygroundPage({
   workspace = "image",
   routeBase = "/playground",
@@ -180,6 +678,7 @@ export function PlaygroundPage({
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { models, fetchModels } = useModelsStore();
+  const apiBaseUrl = useApiServiceStore((state) => state.baseUrl);
   const {
     apiKey,
     isLoading: isLoadingApiKey,
@@ -195,18 +694,17 @@ export function PlaygroundPage({
     setActiveTab,
     getActiveTab,
     setSelectedModel,
+    setSelectedModelPreservingForm,
     setFormValue,
     setFormValues,
     setFormFields,
     resetForm,
     runPrediction,
     runBatch,
-    abortRun,
     clearBatchResults,
     setUploading,
     reorderTab,
     consumePendingFormValues,
-    validateForm,
     removeGenerationHistoryItem,
   } = usePlaygroundStore();
   const { templates, loadTemplates, createTemplate, migrateFromLocalStorage } =
@@ -232,6 +730,7 @@ export function PlaygroundPage({
       null,
     [workspaceTabs, activeTabId],
   );
+  const preferRemoteGenerationHistory = !isOfficialWaveSpeedBaseUrl(apiBaseUrl);
   const [remoteGenerationHistory, setRemoteGenerationHistory] = useState<
     HistoryItem[]
   >([]);
@@ -257,7 +756,8 @@ export function PlaygroundPage({
             id.includes("music") ||
             id.includes("speech")
           );
-        if (workspace === "3d") return id.includes("3d") || id.includes("tripo");
+        if (workspace === "3d")
+          return id.includes("3d") || id.includes("tripo");
         return (
           id.includes("image") ||
           id.includes("text-to-image") ||
@@ -273,9 +773,26 @@ export function PlaygroundPage({
     setIsRemoteHistoryLoading(true);
     try {
       const response = await apiClient.getHistory(1, 100);
-      setRemoteGenerationHistory(
-        filterHistoryForWorkspace(response.items || []),
+      const items = response.items || [];
+      const refreshedItems = await Promise.all(
+        items.map(async (item) => {
+          if (!isPredictionRunningStatus(item.status)) return item;
+          try {
+            const refreshed = await apiClient.getPredictionDetails(item.id);
+            return {
+              ...item,
+              ...refreshed,
+              id: item.id,
+              created_at: refreshed.created_at || item.created_at,
+              inputs: item.inputs,
+              input: item.input,
+            };
+          } catch {
+            return item;
+          }
+        }),
       );
+      setRemoteGenerationHistory(filterHistoryForWorkspace(refreshedItems));
     } catch (error) {
       console.warn("[PlaygroundPage] Failed to load generation history", error);
     } finally {
@@ -321,16 +838,163 @@ export function PlaygroundPage({
     null,
   );
   const [isPricingLoading, setIsPricingLoading] = useState(false);
+  const [smartToggleOverrides, setSmartToggleOverrides] = useState<
+    Record<string, Record<string, string>>
+  >({});
   const pricingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pricingModelRef = useRef<string | null>(null);
+
+  const activeSmartFamily = useMemo(() => {
+    const family = findFamilyByVariantId(activeTab?.selectedModel?.model_id);
+    return canUseSmartFamilyForWorkspace(family?.category, workspace)
+      ? family
+      : undefined;
+  }, [activeTab?.selectedModel?.model_id, workspace]);
+
+  const smartVariantModels = useMemo(() => {
+    if (!activeSmartFamily) return [];
+    return activeSmartFamily.variantIds
+      .map((id) => filteredModels.find((model) => model.model_id === id))
+      .filter((model): model is Model => Boolean(model));
+  }, [activeSmartFamily, filteredModels]);
+
+  const smartFilledFields = useMemo(
+    () => getFilledFieldNames(activeTab?.formValues ?? {}),
+    [activeTab?.formValues],
+  );
+
+  const smartToggleDefaults = useMemo(() => {
+    if (!activeSmartFamily) return {};
+    return Object.fromEntries(
+      activeSmartFamily.toggles.map((toggle) => [toggle.key, toggle.default]),
+    );
+  }, [activeSmartFamily]);
+
+  const activeSmartToggleValues = useMemo(() => {
+    if (!activeSmartFamily) return {};
+    return {
+      ...smartToggleDefaults,
+      ...(smartToggleOverrides[activeSmartFamily.id] ?? {}),
+    };
+  }, [activeSmartFamily, smartToggleDefaults, smartToggleOverrides]);
+
+  const smartResolvedModel = useMemo(() => {
+    if (!activeSmartFamily) return null;
+    const resolvedVariantId = activeSmartFamily.resolveVariant(
+      smartFilledFields,
+      activeSmartToggleValues,
+    );
+    return findResolvedSmartModel(
+      smartVariantModels,
+      resolvedVariantId,
+      activeSmartFamily.primaryVariant,
+    );
+  }, [
+    activeSmartFamily,
+    activeSmartToggleValues,
+    smartFilledFields,
+    smartVariantModels,
+  ]);
+
   const currentPricingKey = useMemo(
     () =>
       JSON.stringify({
-        modelId: activeTab?.selectedModel?.model_id ?? null,
+        modelId:
+          smartResolvedModel?.model_id ??
+          activeTab?.selectedModel?.model_id ??
+          null,
         values: activeTab?.formValues ?? null,
+        smart: activeSmartFamily ? (activeSmartToggleValues ?? null) : null,
       }),
-    [activeTab?.selectedModel?.model_id, activeTab?.formValues],
+    [
+      activeSmartFamily,
+      activeSmartToggleValues,
+      activeTab?.selectedModel?.model_id,
+      activeTab?.formValues,
+      smartResolvedModel?.model_id,
+    ],
   );
+
+  const smartVisibleFields = useMemo(() => {
+    if (!activeSmartFamily || smartVariantModels.length === 0) return undefined;
+    const mergedFields = mergeVariantFormFields(
+      smartVariantModels,
+      activeSmartFamily.primaryVariant,
+    ).filter(
+      (field) => !(activeSmartFamily.excludeFields ?? []).includes(field.name),
+    );
+    if (!smartResolvedModel) return mergedFields;
+
+    const resolvedFields = extractModelFormFields(smartResolvedModel);
+    const resolvedFieldMap = new Map(
+      resolvedFields.map((field) => [field.name, field]),
+    );
+    const visibleFields: FormFieldConfig[] = [];
+    const added = new Set<string>();
+
+    for (const mergedField of mergedFields) {
+      const resolvedField = resolvedFieldMap.get(mergedField.name);
+      if (resolvedField) {
+        visibleFields.push(resolvedField);
+        added.add(resolvedField.name);
+      } else if (isSmartTriggerField(mergedField, activeSmartFamily.category)) {
+        visibleFields.push({ ...mergedField, required: false });
+        added.add(mergedField.name);
+      }
+    }
+
+    for (const resolvedField of resolvedFields) {
+      if (added.has(resolvedField.name)) continue;
+      visibleFields.push(resolvedField);
+    }
+
+    if (activeSmartFamily.id === "seedance-2.0") {
+      return tuneSeedance20Fields(
+        visibleFields,
+        activeSmartToggleValues.mode ?? "generate",
+      );
+    }
+
+    if (activeSmartFamily.id === "infinitetalk") {
+      return tuneInfiniteTalkFields(
+        visibleFields,
+        activeSmartToggleValues.mode ?? "image",
+      );
+    }
+
+    return visibleFields;
+  }, [
+    activeSmartFamily,
+    activeSmartToggleValues.mode,
+    smartResolvedModel,
+    smartVariantModels,
+  ]);
+
+  const runModel = smartResolvedModel ?? activeTab?.selectedModel ?? null;
+
+  const runFields = useMemo(() => {
+    if (!activeTab) return [];
+    return smartResolvedModel
+      ? extractModelFormFields(smartResolvedModel)
+      : activeTab.formFields;
+  }, [activeTab, smartResolvedModel]);
+
+  const runFormValues = useMemo(() => {
+    if (!activeTab) return {};
+    const mappedValues =
+      activeSmartFamily?.mapValues && runModel
+        ? activeSmartFamily.mapValues(activeTab.formValues, runModel.model_id)
+        : activeTab.formValues;
+    return filterValuesForFields(mappedValues, runFields);
+  }, [activeSmartFamily, activeTab, runFields, runModel]);
+
+  const buildRunPricingInput = useCallback(() => {
+    if (!activeTab) return null;
+    return buildNormalizedInput(
+      { ...getDefaultValues(runFields), ...runFormValues },
+      runFields,
+    );
+  }, [activeTab, runFields, runFormValues]);
 
   // Mobile view state: 'config' or 'output'
   const [mobileView, setMobileView] = useState<"config" | "output">("config");
@@ -522,6 +1186,19 @@ export function PlaygroundPage({
     void fetchMyGenerations();
   }, [fetchMyGenerations, isActive, isValidated]);
 
+  useEffect(() => {
+    if (!activeSmartFamily || !activeTab?.selectedModel || !smartResolvedModel)
+      return;
+    if (activeTab.selectedModel.model_id === smartResolvedModel.model_id)
+      return;
+    setSelectedModelPreservingForm(smartResolvedModel);
+  }, [
+    activeSmartFamily,
+    activeTab?.selectedModel,
+    setSelectedModelPreservingForm,
+    smartResolvedModel,
+  ]);
+
   // Save prediction inputs to local storage when prediction completes
   const lastSavedPredictionRef = useRef<string | null>(null);
   useEffect(() => {
@@ -571,7 +1248,8 @@ export function PlaygroundPage({
       clearTimeout(pricingTimeoutRef.current);
     }
 
-    const selectedModel = activeTab.selectedModel;
+    const selectedModel = runModel;
+    if (!selectedModel) return;
     const selectedModelId = selectedModel.model_id;
     const modelChanged = pricingModelRef.current !== selectedModelId;
     pricingModelRef.current = selectedModelId;
@@ -587,32 +1265,12 @@ export function PlaygroundPage({
     pricingTimeoutRef.current = setTimeout(async () => {
       setIsPricingLoading(true);
       try {
-        const defaults = getDefaultValues(activeTab.formFields);
-        const mergedValues = { ...defaults, ...activeTab.formValues };
-        const cleanedInput: Record<string, unknown> = {};
-        const integerFields = new Set(
-          activeTab.formFields
-            .filter((f) => f.schemaType === "integer")
-            .map((f) => f.name),
-        );
-
-        for (const [key, value] of Object.entries(mergedValues)) {
-          if (
-            value !== "" &&
-            value !== undefined &&
-            value !== null &&
-            !(Array.isArray(value) && value.length === 0)
-          ) {
-            cleanedInput[key] =
-              integerFields.has(key) && typeof value === "number"
-                ? Math.round(value)
-                : value;
-          }
-        }
-
         const price = await apiClient.calculatePricing(
           selectedModelId,
-          normalizePayloadArrays(cleanedInput, activeTab.formFields),
+          buildNormalizedInput(
+            { ...getDefaultValues(runFields), ...runFormValues },
+            runFields,
+          ),
         );
         if (cancelled) return;
 
@@ -647,6 +1305,9 @@ export function PlaygroundPage({
     activeTab?.selectedModel,
     activeTab?.formValues,
     apiKey,
+    runFields,
+    runFormValues,
+    runModel,
     currentPricingKey,
   ]);
 
@@ -781,20 +1442,45 @@ export function PlaygroundPage({
   ]);
 
   const handleModelChange = (modelId: string) => {
-    const model = filteredModels.find((m) => m.model_id === modelId);
+    const family =
+      workspace === "image" || workspace === "video" || workspace === "avatar"
+        ? findFamilyByVariantId(modelId)
+        : undefined;
+    const targetModelId =
+      canUseSmartFamilyForWorkspace(family?.category, workspace) &&
+      filteredModels.some((model) => model.model_id === family.primaryVariant)
+        ? family.primaryVariant
+        : modelId;
+    const model = filteredModels.find((m) => m.model_id === targetModelId);
     if (model) {
       if (activeTab) {
         setSelectedModel(model);
       } else {
         createTab(model, undefined, undefined, null, workspace);
       }
-      navigate(`${routeBase}/${encodeURIComponent(modelId)}`, { replace: true });
+      navigate(`${routeBase}/${encodeURIComponent(targetModelId)}`, {
+        replace: true,
+      });
       if (rightPanelTab !== "result") {
         setRightPanelTab("result");
         sessionStorage.setItem("pg_rightPanelTab", "result");
       }
     }
   };
+
+  const handleSmartToggleChange = useCallback(
+    (key: string, value: string) => {
+      if (!activeSmartFamily) return;
+      setSmartToggleOverrides((prev) => ({
+        ...prev,
+        [activeSmartFamily.id]: {
+          ...(prev[activeSmartFamily.id] ?? {}),
+          [key]: value,
+        },
+      }));
+    },
+    [activeSmartFamily],
+  );
 
   // Bind activeTabId into the onChange callback so that async operations
   // (e.g. file uploads) update the correct tab even if the user switches tabs
@@ -806,39 +1492,14 @@ export function PlaygroundPage({
     [setFormValue, activeTabId],
   );
 
-  const buildPricingInput = useCallback(() => {
-    if (!activeTab) return null;
-    const defaults = getDefaultValues(activeTab.formFields);
-    const mergedValues = { ...defaults, ...activeTab.formValues };
-    const cleanedInput: Record<string, unknown> = {};
-    const integerFields = new Set(
-      activeTab.formFields
-        .filter((field) => field.schemaType === "integer")
-        .map((field) => field.name),
-    );
-
-    for (const [key, value] of Object.entries(mergedValues)) {
-      if (
-        value !== "" &&
-        value !== undefined &&
-        value !== null &&
-        !(Array.isArray(value) && value.length === 0)
-      ) {
-        cleanedInput[key] =
-          integerFields.has(key) && typeof value === "number"
-            ? Math.round(value)
-            : value;
-      }
+  const ensureSufficientBalanceForRun = useCallback(async () => {
+    if (!activeTab?.selectedModel || !runModel) return false;
+    const modelForRun = runModel;
+    if (modelForRun.model_id !== activeTab.selectedModel.model_id) {
+      setSelectedModelPreservingForm(modelForRun);
     }
 
-    return normalizePayloadArrays(cleanedInput, activeTab.formFields);
-  }, [activeTab]);
-
-  const ensureSufficientBalanceForRun = useCallback(async () => {
-    if (!activeTab?.selectedModel) return false;
-    if (!validateForm()) return false;
-
-    const pricingInput = buildPricingInput();
+    const pricingInput = buildRunPricingInput();
     if (!pricingInput) return false;
 
     const repeatCount =
@@ -849,11 +1510,11 @@ export function PlaygroundPage({
     setIsPricingLoading(true);
     try {
       const price = await apiClient.calculatePricing(
-        activeTab.selectedModel.model_id,
+        modelForRun.model_id,
         pricingInput,
       );
       const discountRate =
-        price.discountRate ?? getModelDiscountRate(activeTab.selectedModel);
+        price.discountRate ?? getModelDiscountRate(modelForRun);
       const nextPrice = {
         price: price.price,
         discountedPrice:
@@ -889,7 +1550,13 @@ export function PlaygroundPage({
     } finally {
       setIsPricingLoading(false);
     }
-  }, [activeTab, buildPricingInput, currentPricingKey, validateForm]);
+  }, [
+    activeTab,
+    buildRunPricingInput,
+    currentPricingKey,
+    runModel,
+    setSelectedModelPreservingForm,
+  ]);
 
   const handleSetDefaults = useCallback(
     (defaults: Record<string, unknown>) => {
@@ -945,15 +1612,23 @@ export function PlaygroundPage({
     switchTab("result");
 
     const { batchConfig } = activeTab;
+    const runOptions = {
+      model: runModel,
+      formFields: runFields,
+      formValues: runFormValues,
+    };
     if (batchConfig.enabled && batchConfig.repeatCount > 1) {
-      await runBatch();
+      await runBatch(runOptions);
     } else {
-      await runPrediction();
+      await runPrediction(runOptions);
     }
     void fetchMyGenerations();
   }, [
     activeTab,
     ensureSufficientBalanceForRun,
+    runFields,
+    runFormValues,
+    runModel,
     switchTab,
     runBatch,
     runPrediction,
@@ -976,7 +1651,9 @@ export function PlaygroundPage({
         toast({
           title: "删除失败",
           description:
-            error instanceof Error ? error.message : "删除记录失败，请稍后重试。",
+            error instanceof Error
+              ? error.message
+              : "删除记录失败，请稍后重试。",
           variant: "destructive",
         });
       }
@@ -990,7 +1667,7 @@ export function PlaygroundPage({
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        if (activeTab?.selectedModel && !activeTab.isRunning) {
+        if (activeTab?.selectedModel) {
           handleRun();
         }
       }
@@ -1093,9 +1770,12 @@ export function PlaygroundPage({
         });
 
         if (template.playgroundData.modelId) {
-          navigate(`${routeBase}/${encodeURIComponent(template.playgroundData.modelId)}`, {
-            replace: true,
-          });
+          navigate(
+            `${routeBase}/${encodeURIComponent(template.playgroundData.modelId)}`,
+            {
+              replace: true,
+            },
+          );
         }
 
         // For new tab: set form values after tab is active
@@ -1217,7 +1897,57 @@ export function PlaygroundPage({
                 models={filteredModels}
                 value={activeTab?.selectedModel?.model_id}
                 onChange={handleModelChange}
+                hideVariantSelector={
+                  workspace === "image" ||
+                  workspace === "video" ||
+                  workspace === "avatar"
+                }
+                variant={
+                  workspace === "video"
+                    ? "video"
+                    : workspace === "avatar"
+                      ? "avatar"
+                      : "default"
+                }
               />
+              {activeSmartFamily && activeSmartFamily.toggles.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {activeSmartFamily.toggles.map((toggle) => (
+                    <div
+                      key={toggle.key}
+                      className="flex overflow-hidden rounded-lg border border-white/[0.08] bg-[#141414]"
+                    >
+                      {toggle.options.map((option) => {
+                        const isSelected =
+                          activeSmartToggleValues[toggle.key] === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() =>
+                              handleSmartToggleChange(toggle.key, option.value)
+                            }
+                            className={cn(
+                              "px-4 py-2 text-xs font-medium transition-colors",
+                              isSelected
+                                ? "bg-white/[0.12] text-white"
+                                : "text-[#9ca3af] hover:bg-white/[0.04] hover:text-white",
+                            )}
+                          >
+                            {t(
+                              option.labelKey,
+                              getSmartToggleFallback(
+                                option.labelKey,
+                                option.value,
+                              ),
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Parameters */}
@@ -1233,6 +1963,7 @@ export function PlaygroundPage({
                   onFieldsChange={setFormFields}
                   onUploadingChange={setUploading}
                   scrollable={false}
+                  fieldsOverride={smartVisibleFields}
                 />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center gap-4 px-6 text-center">
@@ -1279,16 +2010,9 @@ export function PlaygroundPage({
                 <div className="flex-1">
                   <BatchControls
                     disabled={!activeTab?.selectedModel}
-                    isRunning={activeTab?.isRunning ?? false}
                     isUploading={(activeTab?.uploadingCount ?? 0) > 0}
                     onRun={handleRun}
-                    onAbort={abortRun}
                     runLabel={t("playground.run")}
-                    runningLabel={
-                      activeTab?.batchState?.isRunning
-                        ? `${t("playground.abort", "Abort")} (${activeTab.batchState.queue.length})`
-                        : t("playground.abort", "Abort")
-                    }
                     price={
                       activePrice != null
                         ? activePrice
@@ -1300,7 +2024,7 @@ export function PlaygroundPage({
                 </div>
                 <button
                   onClick={handleReset}
-                  disabled={!activeTab || activeTab.isRunning}
+                  disabled={!activeTab}
                   className="flex items-center justify-center w-8 h-8 rounded-lg border border-[hsl(var(--playground-border))] text-muted-foreground hover:text-white hover:bg-white/6 transition-colors disabled:opacity-40"
                   title={t("playground.resetForm")}
                 >
@@ -1362,63 +2086,66 @@ export function PlaygroundPage({
                           {t("playground.noTabs", "No open tabs")}
                         </div>
                       ) : (
-                        workspaceTabs.map((tab) => (
-                          <div
-                            key={tab.id}
-                            title={
-                              tab.selectedModel?.model_id ||
-                              t("playground.tabs.newTab")
-                            }
-                            onClick={() => {
-                              handleTabClick(tab.id);
-                              setTabListOpen(false);
-                            }}
-                            className={cn(
-                              "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors cursor-pointer",
-                              "hover:bg-white/6 hover:text-white",
-                              tab.id === activeTabId &&
-                                "bg-[hsl(var(--playground-tab-active))] text-white font-medium",
-                            )}
-                          >
-                            {tab.isRunning ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-primary" />
-                            ) : (
-                              <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="truncate font-medium">
-                                {tab.selectedModel?.model_id ||
-                                  t("playground.tabs.newTab")}
-                              </div>
-                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                                {tab.selectedModel?.type && (
-                                  <span>{tab.selectedModel.type}</span>
-                                )}
-                                <span className="flex items-center gap-0.5">
-                                  <Clock className="h-2.5 w-2.5" />
-                                  {new Date(tab.createdAt).toLocaleTimeString(
-                                    [],
-                                    { hour: "2-digit", minute: "2-digit" },
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                            {tab.id === activeTabId && (
-                              <span className="text-[9px] bg-[hsl(var(--playground-accent))] text-black rounded px-1 py-0.5 font-medium shrink-0">
-                                active
-                              </span>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCloseTab(e, tab.id);
+                        workspaceTabs.map((tab) => {
+                          const tabTitle = tab.selectedModel
+                            ? workspace === "image"
+                              ? getFriendlyModelName(tab.selectedModel)
+                              : tab.selectedModel.model_id
+                            : t("playground.tabs.newTab");
+                          return (
+                            <div
+                              key={tab.id}
+                              title={tab.selectedModel?.model_id || tabTitle}
+                              onClick={() => {
+                                handleTabClick(tab.id);
+                                setTabListOpen(false);
                               }}
-                              className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-opacity shrink-0 text-muted-foreground hover:text-white"
+                              className={cn(
+                                "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors cursor-pointer",
+                                "hover:bg-white/6 hover:text-white",
+                                tab.id === activeTabId &&
+                                  "bg-[hsl(var(--playground-tab-active))] text-white font-medium",
+                              )}
                             >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))
+                              {tab.isRunning ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-primary" />
+                              ) : (
+                                <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="truncate font-medium">
+                                  {tabTitle}
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                  {tab.selectedModel?.type && (
+                                    <span>{tab.selectedModel.type}</span>
+                                  )}
+                                  <span className="flex items-center gap-0.5">
+                                    <Clock className="h-2.5 w-2.5" />
+                                    {new Date(tab.createdAt).toLocaleTimeString(
+                                      [],
+                                      { hour: "2-digit", minute: "2-digit" },
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                              {tab.id === activeTabId && (
+                                <span className="text-[9px] bg-[hsl(var(--playground-accent))] text-black rounded px-1 py-0.5 font-medium shrink-0">
+                                  active
+                                </span>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCloseTab(e, tab.id);
+                                }}
+                                className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-opacity shrink-0 text-muted-foreground hover:text-white"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })
                       )}
                     </div>
                     <div className="border-t border-[hsl(var(--playground-border))] p-1.5">
@@ -1452,6 +2179,11 @@ export function PlaygroundPage({
                   {workspaceTabs.map((tab) => {
                     const isActive =
                       tab.id === activeTabId && rightPanelTab === "result";
+                    const tabTitle = tab.selectedModel
+                      ? workspace === "image"
+                        ? getFriendlyModelName(tab.selectedModel)
+                        : tab.selectedModel.model_id
+                      : t("playground.tabs.newTab");
                     return (
                       <div
                         key={tab.id}
@@ -1463,10 +2195,7 @@ export function PlaygroundPage({
                         onClick={() => {
                           handleTabClick(tab.id);
                         }}
-                        title={
-                          tab.selectedModel?.model_id ||
-                          t("playground.tabs.newTab")
-                        }
+                        title={tab.selectedModel?.model_id || tabTitle}
                         className={cn(
                           "group relative flex h-8 items-center gap-1.5 px-3 text-xs transition-colors cursor-pointer select-none min-w-[80px] max-w-[240px] hover:bg-white/6",
                           dragTabId === tab.id && "opacity-40",
@@ -1487,10 +2216,7 @@ export function PlaygroundPage({
                         {tab.isRunning && (
                           <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
                         )}
-                        <span className="truncate flex-1">
-                          {tab.selectedModel?.model_id ||
-                            t("playground.tabs.newTab")}
-                        </span>
+                        <span className="truncate flex-1">{tabTitle}</span>
                         <button
                           onClick={(e) => handleCloseTab(e, tab.id)}
                           className={cn(
@@ -1568,6 +2294,7 @@ export function PlaygroundPage({
                   localHistory={activeTab?.generationHistory ?? []}
                   remoteHistory={remoteGenerationHistory}
                   isLoading={isRemoteHistoryLoading}
+                  preferRemoteHistory={preferRemoteGenerationHistory}
                   onRefresh={fetchMyGenerations}
                   onShowExamples={() => switchTab("featured")}
                   onDelete={handleDeleteGeneration}

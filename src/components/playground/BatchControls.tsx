@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { Switch } from "@/components/ui/switch";
@@ -10,45 +9,28 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Play, Square, ChevronDown, Loader2 } from "lucide-react";
+import { Play, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PriceDisplay } from "@/lib/pricing";
 
 interface BatchControlsProps {
   disabled?: boolean;
-  isRunning?: boolean;
   isUploading?: boolean;
   onRun: () => void;
-  onAbort: () => void;
   runLabel: string;
-  runningLabel: string;
   price?: string | PriceDisplay;
 }
 
 export function BatchControls({
   disabled,
-  isRunning,
   isUploading,
   onRun,
-  onAbort,
   runLabel,
-  runningLabel,
   price,
 }: BatchControlsProps) {
   const { t } = useTranslation();
   const { getActiveTab, setBatchConfig } = usePlaygroundStore();
   const activeTab = getActiveTab();
-
-  // Delay abort button by 500ms to prevent accidental clicks
-  const [abortReady, setAbortReady] = useState(false);
-  useEffect(() => {
-    if (!isRunning) {
-      setAbortReady(false);
-      return;
-    }
-    const timer = setTimeout(() => setAbortReady(true), 500);
-    return () => clearTimeout(timer);
-  }, [isRunning]);
 
   if (!activeTab) return null;
 
@@ -109,30 +91,6 @@ export function BatchControls({
       </span>
     );
   };
-
-  if (isRunning) {
-    return (
-      <div className="flex rounded-lg border border-transparent shadow-sm">
-        <Button
-          className={cn(
-            "flex-1 h-9 text-sm text-white transition-all duration-300 shadow-none",
-            abortReady
-              ? "bg-red-600 hover:bg-red-700 cursor-pointer"
-              : "bg-blue-600 cursor-default",
-          )}
-          onClick={abortReady ? onAbort : undefined}
-          disabled={!abortReady}
-        >
-          {abortReady ? (
-            <Square className="mr-2 h-3.5 w-3.5 fill-current" />
-          ) : (
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-          )}
-          {abortReady ? runningLabel : t("playground.running")}
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <div className="flex rounded-lg border border-transparent shadow-sm">

@@ -23,6 +23,7 @@ interface DynamicFormProps {
   collapsible?: boolean;
   /** When false, render form content only (no ScrollArea); parent is the scroll container. Used in Playground for mobile. */
   scrollable?: boolean;
+  fieldsOverride?: FormFieldConfig[];
 }
 
 function getSettingsFieldSlot(field: FormFieldConfig) {
@@ -97,6 +98,7 @@ export function DynamicForm({
   onUploadingChange,
   collapsible = false,
   scrollable = true,
+  fieldsOverride,
 }: DynamicFormProps) {
   const { t } = useTranslation();
   // Track which hidden fields are enabled
@@ -108,7 +110,7 @@ export function DynamicForm({
   const initializedRef = useRef<string | null>(null);
 
   // Extract schema from model
-  const fields = useMemo<FormFieldConfig[]>(() => {
+  const extractedFields = useMemo<FormFieldConfig[]>(() => {
     // The API returns schema in api_schema.api_schemas[0].request_schema
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const apiSchemas = (model.api_schema as any)?.api_schemas as
@@ -137,6 +139,7 @@ export function DynamicForm({
       requestSchema["x-order-properties"],
     );
   }, [model]);
+  const fields = fieldsOverride ?? extractedFields;
 
   // Reset enabled hidden fields when model changes
   useEffect(() => {

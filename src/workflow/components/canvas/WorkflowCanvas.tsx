@@ -24,6 +24,7 @@ import ReactFlow, {
   type EdgeChange,
   type OnSelectionChangeParams,
 } from "reactflow";
+import { useLocation } from "react-router-dom";
 import "reactflow/dist/style.css";
 import { useWorkflowStore } from "../../stores/workflow.store";
 import { useExecutionStore } from "../../stores/execution.store";
@@ -45,6 +46,11 @@ import { getNodeIcon } from "./custom-node/NodeIcons";
 import { useModelsStore } from "@/stores/modelsStore";
 import { getFormFieldsFromModel } from "@/lib/schemaToForm";
 import { formFieldsToModelParamSchema } from "../../lib/model-converter";
+import {
+  CANVAS_IMPORT_EVENT,
+  consumeCanvasImports,
+  type PendingCanvasImport,
+} from "../../lib/pendingCanvasImport";
 import {
   Tooltip,
   TooltipTrigger,
@@ -437,6 +443,7 @@ interface WorkflowCanvasProps {
 
 export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
   const { t } = useTranslation();
+  const location = useLocation();
   const stableNodeTypes = useMemo(() => nodeTypes, []);
   const stableEdgeTypes = useMemo(() => edgeTypes, []);
   const {
@@ -463,6 +470,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
   const displayNodesRef = useRef<Node[]>([]);
+  const [isFlowReady, setIsFlowReady] = useState(false);
   const [canvasViewport, setCanvasViewport] = useState({
     x: 0,
     y: 0,
@@ -1216,6 +1224,110 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
     if (!reactFlowInstance.current) return { x, y };
     return reactFlowInstance.current.screenToFlowPosition({ x, y });
   }, []);
+
+  const getCanvasCenterPosition = useCallback(() => {
+    const wrapper = reactFlowWrapper.current;
+    if (!reactFlowInstance.current || !wrapper) return { x: 120, y: 120 };
+    const rect = wrapper.getBoundingClientRect();
+    return reactFlowInstance.current.screenToFlowPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    });
+  }, []);
+
+  const createMediaUploadNode = useCallback(
+    (item: PendingCanvasImport, index = 0) => {
+      const uploadDef = nodeDefs.find((d) => d.type === "input/media-upload");
+      const defaultParams: Record<string, unknown> = {};
+      if (uploadDef) {
+        for (const p of uploadDef.params) {
+          if (p.default !== undefined) defaultParams[p.key] = p.default;
+        }
+      }
+
+      const center = getCanvasCenterPosition();
+      const position = {
+        x: center.x + index * 40,
+        y: center.y + index * 36,
+      };
+      const nodeLabel =
+        item.label ||
+        (uploadDef
+          ? t(`workflow.nodeDefs.${uploadDef.type}.label`, uploadDef.label)
+          : "Upload");
+
+      const newNodeId = addNode(
+        "input/media-upload",
+        position,
+        defaultParams,
+        nodeLabel,
+        uploadDef?.params ?? [],
+        uploadDef?.inputs ?? [],
+        uploadDef?.outputs ?? [],
+      );
+
+      const { updateNodeParams, adoptNode } = useWorkflowStore.getState();
+      updateNodeParams(newNodeId, {
+        ...defaultParams,
+        uploadedUrl: item.url,
+        fileName: item.fileName || "generation",
+        mediaType: item.mediaType,
+      });
+
+      recordRecentNodeType("input/media-upload");
+      handleNodeCreated(newNodeId);
+
+      const editingId = useUIStore.getState().editingGroupId;
+      if (editingId) {
+        adoptNode(editingId, newNodeId);
+      }
+
+      selectNode(newNodeId);
+      return newNodeId;
+    },
+    [
+      addNode,
+      getCanvasCenterPosition,
+      handleNodeCreated,
+      nodeDefs,
+      recordRecentNodeType,
+      selectNode,
+      t,
+    ],
+  );
+
+  const importQueuedCanvasItems = useCallback(() => {
+    if (
+      !location.pathname.startsWith("/workflow") ||
+      !isFlowReady ||
+      !nodeDefs.some((d) => d.type === "input/media-upload")
+    ) {
+      return;
+    }
+    const items = consumeCanvasImports();
+    if (items.length === 0) return;
+
+    const importedNodeIds = items.map((item, index) =>
+      createMediaUploadNode(item, index),
+    );
+    window.setTimeout(() => {
+      reactFlowInstance.current?.fitView({
+        nodes: importedNodeIds.map((id) => ({ id })),
+        padding: 0.35,
+        duration: 360,
+        minZoom: 0.05,
+        maxZoom: 1.2,
+        includeHiddenNodes: false,
+      });
+      updateEmptyViewportHint();
+    }, 80);
+  }, [
+    createMediaUploadNode,
+    isFlowReady,
+    location.pathname,
+    nodeDefs,
+    updateEmptyViewportHint,
+  ]);
 
   const addNodeAtMenuPosition = useCallback(
     (def: NodeTypeDefinition) => {
@@ -1980,6 +2092,13 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
   );
 
   useEffect(() => {
+    importQueuedCanvasItems();
+    window.addEventListener(CANVAS_IMPORT_EVENT, importQueuedCanvasItems);
+    return () =>
+      window.removeEventListener(CANVAS_IMPORT_EVENT, importQueuedCanvasItems);
+  }, [importQueuedCanvasItems]);
+
+  useEffect(() => {
     const handleFitView = () => {
       reactFlowInstance.current?.fitView({
         padding: 0.2,
@@ -2728,6 +2847,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           onDrop={onDrop}
           onInit={(instance) => {
             reactFlowInstance.current = instance;
+            setIsFlowReady(true);
             setCanvasViewport(instance.getViewport());
             useUIStore.getState().setGetViewportCenter(() => {
               const vp = instance.getViewport();

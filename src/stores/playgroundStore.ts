@@ -279,30 +279,70 @@ export async function hydratePlaygroundSession(): Promise<void> {
   }
 }
 
-// Module-level map for AbortControllers (not serializable, so kept outside store state)
-const abortControllers = new Map<string, AbortController>();
+// Module-level controllers (not serializable). A tab may have several
+// background generations running at the same time.
+const abortControllers = new Map<string, Set<AbortController>>();
+
+function addRunController(tabId: string, controller: AbortController): void {
+  const controllers = abortControllers.get(tabId) ?? new Set();
+  controllers.add(controller);
+  abortControllers.set(tabId, controllers);
+}
+
+function releaseRunController(
+  tabId: string,
+  controller: AbortController,
+): boolean {
+  const controllers = abortControllers.get(tabId);
+  if (!controllers) return false;
+  controllers.delete(controller);
+  if (controllers.size === 0) {
+    abortControllers.delete(tabId);
+    return false;
+  }
+  return true;
+}
+
+function hasActiveRuns(tabId: string | null | undefined): boolean {
+  return Boolean(tabId && abortControllers.get(tabId)?.size);
+}
+
+function normalizePredictionStatus(
+  status: unknown,
+): PredictionResult["status"] {
+  return status === "pending" ||
+    status === "processing" ||
+    status === "completed" ||
+    status === "failed" ||
+    status === "created"
+    ? status
+    : "processing";
+}
 
 function createPendingGenerationItem(params: {
   id: string;
   modelId: string;
   formValues: Record<string, unknown>;
+  prediction?: PredictionResult;
   addedAt?: number;
 }): GenerationHistoryItem {
+  const status = normalizePredictionStatus(params.prediction?.status);
   return {
     id: params.id,
     prediction: {
+      ...(params.prediction ?? {}),
       id: params.id,
       model: params.modelId,
-      status: "processing",
-      outputs: [],
+      status,
+      outputs: params.prediction?.outputs ?? [],
     },
-    outputs: [],
+    outputs: params.prediction?.outputs ?? [],
     formValues: { ...params.formValues },
     addedAt: params.addedAt ?? Date.now(),
     thumbnailUrl: null,
     thumbnailType: null,
-    status: "processing",
-    error: null,
+    status,
+    error: params.prediction?.error ?? null,
     modelId: params.modelId,
   };
 }
@@ -332,6 +372,12 @@ interface PlaygroundTab {
   pendingFormValues: Record<string, unknown> | null;
 }
 
+interface RunOptions {
+  model?: Model | null;
+  formValues?: Record<string, unknown>;
+  formFields?: FormFieldConfig[];
+}
+
 interface PlaygroundState {
   tabs: PlaygroundTab[];
   activeTabId: string | null;
@@ -353,22 +399,27 @@ interface PlaygroundState {
 
   // Actions on active tab
   setSelectedModel: (model: Model | null) => void;
+  setSelectedModelPreservingForm: (model: Model | null) => void;
   setFormValue: (key: string, value: unknown, tabId?: string) => void;
   setFormValues: (values: Record<string, unknown>) => void;
   setFormFields: (fields: FormFieldConfig[]) => void;
   validateForm: () => boolean;
   clearValidationError: (key: string) => void;
   resetForm: () => void;
-  runPrediction: () => Promise<void>;
+  runPrediction: (options?: RunOptions) => Promise<void>;
   abortRun: () => void;
   clearOutput: () => void;
 
   // Batch processing actions
   setBatchConfig: (config: Partial<BatchConfig>) => void;
-  runBatch: () => Promise<void>;
+  runBatch: (options?: RunOptions) => Promise<void>;
   cancelBatch: () => void;
   clearBatchResults: () => void;
-  generateBatchInputs: () => Record<string, unknown>[];
+  generateBatchInputs: (
+    options?: Pick<RunOptions, "formFields" | "formValues"> & {
+      batchConfig?: BatchConfig;
+    },
+  ) => Record<string, unknown>[];
 
   // File upload tracking
   setUploading: (isUploading: boolean) => void;
@@ -410,6 +461,19 @@ function isEmpty(value: unknown): boolean {
   if (value === undefined || value === null || value === "") return true;
   if (Array.isArray(value) && value.length === 0) return true;
   return false;
+}
+
+function getValidationErrors(
+  fields: FormFieldConfig[],
+  values: Record<string, unknown>,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const field of fields) {
+    if (field.required && isEmpty(values[field.name])) {
+      errors[field.name] = `${field.label} is required`;
+    }
+  }
+  return errors;
 }
 
 function createEmptyTab(
@@ -633,6 +697,23 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     }));
   },
 
+  setSelectedModelPreservingForm: (model: Model | null) => {
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === state.activeTabId
+          ? tab.selectedModel?.model_id === model?.model_id
+            ? tab
+            : {
+                ...tab,
+                selectedModel: model,
+                validationErrors: {},
+                error: null,
+              }
+          : tab,
+      ),
+    }));
+  },
+
   setFormValue: (key: string, value: unknown, tabId?: string) => {
     set((state) => {
       const targetTabId = tabId ?? state.activeTabId;
@@ -689,15 +770,10 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     const activeTab = get().getActiveTab();
     if (!activeTab) return false;
 
-    const errors: Record<string, string> = {};
-    let isValid = true;
-
-    for (const field of activeTab.formFields) {
-      if (field.required && isEmpty(activeTab.formValues[field.name])) {
-        errors[field.name] = `${field.label} is required`;
-        isValid = false;
-      }
-    }
+    const errors = getValidationErrors(
+      activeTab.formFields,
+      activeTab.formValues,
+    );
 
     set((state) => ({
       tabs: state.tabs.map((tab) =>
@@ -707,7 +783,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       ),
     }));
 
-    return isValid;
+    return Object.keys(errors).length === 0;
   },
 
   clearValidationError: (key: string) => {
@@ -739,11 +815,13 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     }));
   },
 
-  runPrediction: async () => {
+  runPrediction: async (options) => {
     const activeTab = get().getActiveTab();
     if (!activeTab) return;
 
-    const { selectedModel, formValues, formFields } = activeTab;
+    const selectedModel = options?.model ?? activeTab.selectedModel;
+    const formValues = options?.formValues ?? activeTab.formValues;
+    const formFields = options?.formFields ?? activeTab.formFields;
     if (!selectedModel) {
       set((state) => ({
         tabs: state.tabs.map((tab) =>
@@ -756,20 +834,20 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     }
 
     // Validate required fields
-    if (!get().validateForm()) {
+    const errors = getValidationErrors(formFields, formValues);
+    if (Object.keys(errors).length > 0) {
+      set((state) => ({
+        tabs: state.tabs.map((tab) =>
+          tab.id === state.activeTabId
+            ? { ...tab, validationErrors: errors }
+            : tab,
+        ),
+      }));
       return;
     }
 
-    const pendingId = `pending-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2)}`;
-    const pendingItem = createPendingGenerationItem({
-      id: pendingId,
-      modelId: selectedModel.model_id,
-      formValues,
-    });
-
-    // Set running state, clear batch results, and add an optimistic card.
+    // Set running state and clear batch results. The placeholder is added only
+    // after the API returns the real prediction id.
     set((state) => ({
       tabs: state.tabs.map((tab) =>
         tab.id === state.activeTabId
@@ -782,20 +860,24 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
               selectedHistoryIndex: null,
               batchState: null,
               batchResults: [],
-              generationHistory: [pendingItem, ...tab.generationHistory].slice(
-                0,
-                200,
-              ),
             }
           : tab,
       ),
     }));
 
     const tabId = get().activeTabId;
+    if (!tabId) return;
 
     // Create AbortController for this run
     const controller = new AbortController();
-    if (tabId) abortControllers.set(tabId, controller);
+    addRunController(tabId, controller);
+    let releasedController = false;
+    const releaseController = () => {
+      if (releasedController) return hasActiveRuns(tabId);
+      releasedController = true;
+      return releaseRunController(tabId, controller);
+    };
+    let pendingId: string | null = null;
 
     try {
       // Clean up form values - remove empty strings and undefined
@@ -820,6 +902,31 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         {
           enableSyncMode: normalizedInput.enable_sync_mode as boolean,
           signal: controller.signal,
+          onSubmitted: (prediction) => {
+            if (!prediction.id) return;
+            pendingId = prediction.id;
+            const pendingItem = createPendingGenerationItem({
+              id: prediction.id,
+              modelId: selectedModel.model_id,
+              formValues,
+              prediction,
+            });
+            set((state) => ({
+              tabs: state.tabs.map((tab) =>
+                tab.id === tabId
+                  ? {
+                      ...tab,
+                      currentPrediction: prediction,
+                      generationHistory: tab.generationHistory.some(
+                        (item) => item.id === prediction.id,
+                      )
+                        ? tab.generationHistory
+                        : [pendingItem, ...tab.generationHistory].slice(0, 200),
+                    }
+                  : tab,
+              ),
+            }));
+          },
         },
       );
 
@@ -890,6 +997,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       }
 
       // Update the specific tab (it might not be active anymore)
+      const stillRunning = releaseController();
       set((state) => ({
         tabs: state.tabs.map((tab) =>
           tab.id === tabId
@@ -897,11 +1005,11 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
                 ...tab,
                 currentPrediction: result,
                 outputs,
-                isRunning: false,
+                isRunning: stillRunning,
                 generationHistory: [
                   ...historyItems,
-                  ...tab.generationHistory.filter(
-                    (item) => item.id !== pendingId,
+                  ...tab.generationHistory.filter((item) =>
+                    pendingId ? item.id !== pendingId : true,
                   ),
                 ].slice(0, 50),
                 selectedHistoryIndex: null,
@@ -916,6 +1024,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       // Don't show error for user-initiated abort
       const isAbort =
         error instanceof DOMException && error.name === "AbortError";
+      const stillRunning = releaseController();
       set((state) => ({
         tabs: state.tabs.map((tab) =>
           tab.id === tabId
@@ -926,13 +1035,13 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
                   : error instanceof Error
                     ? error.message
                     : "Failed to run prediction",
-                isRunning: false,
+                isRunning: stillRunning,
                 generationHistory: isAbort
-                  ? tab.generationHistory.filter(
-                      (item) => item.id !== pendingId,
+                  ? tab.generationHistory.filter((item) =>
+                      pendingId ? item.id !== pendingId : true,
                     )
                   : tab.generationHistory.map((item) =>
-                      item.id === pendingId
+                      pendingId && item.id === pendingId
                         ? {
                             ...item,
                             status: "failed" as const,
@@ -956,17 +1065,21 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         ),
       }));
     } finally {
-      if (tabId) abortControllers.delete(tabId);
+      if (!releasedController) {
+        const stillRunning = releaseController();
+        set((state) => ({
+          tabs: state.tabs.map((tab) =>
+            tab.id === tabId ? { ...tab, isRunning: stillRunning } : tab,
+          ),
+        }));
+      }
     }
   },
 
   abortRun: () => {
     const tabId = get().activeTabId;
     if (!tabId) return;
-    const controller = abortControllers.get(tabId);
-    if (controller) {
-      controller.abort();
-    }
+    abortControllers.get(tabId)?.forEach((controller) => controller.abort());
   },
 
   clearOutput: () => {
@@ -1095,11 +1208,13 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     }));
   },
 
-  generateBatchInputs: () => {
+  generateBatchInputs: (options) => {
     const activeTab = get().getActiveTab();
     if (!activeTab) return [];
 
-    const { formValues, formFields, batchConfig } = activeTab;
+    const formValues = options?.formValues ?? activeTab.formValues;
+    const formFields = options?.formFields ?? activeTab.formFields;
+    const batchConfig = options?.batchConfig ?? activeTab.batchConfig;
     const count = batchConfig.repeatCount;
     // Only randomize seed if the field exists and is a number type
     const hasSeedField = formFields.some(
@@ -1135,11 +1250,13 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     return inputs;
   },
 
-  runBatch: async () => {
+  runBatch: async (options) => {
     const activeTab = get().getActiveTab();
     if (!activeTab) return;
 
-    const { selectedModel, formFields, formValues } = activeTab;
+    const selectedModel = options?.model ?? activeTab.selectedModel;
+    const formValues = options?.formValues ?? activeTab.formValues;
+    const formFields = options?.formFields ?? activeTab.formFields;
     if (!selectedModel) {
       set((state) => ({
         tabs: state.tabs.map((tab) =>
@@ -1152,7 +1269,15 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     }
 
     // Validate required fields first
-    if (!get().validateForm()) {
+    const errors = getValidationErrors(formFields, formValues);
+    if (Object.keys(errors).length > 0) {
+      set((state) => ({
+        tabs: state.tabs.map((tab) =>
+          tab.id === state.activeTabId
+            ? { ...tab, validationErrors: errors }
+            : tab,
+        ),
+      }));
       return;
     }
 
@@ -1160,7 +1285,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     const batchSnapshotValues = { ...formValues };
 
     // Generate batch inputs
-    const inputs = get().generateBatchInputs();
+    const inputs = get().generateBatchInputs({ formValues, formFields });
     if (inputs.length === 0) {
       return;
     }
@@ -1172,23 +1297,19 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       input,
       status: "pending" as const,
     }));
-    const pendingItems = inputs.map((_, index) =>
-      createPendingGenerationItem({
-        id: `pending-batch-${Date.now()}-${index}-${Math.random()
-          .toString(36)
-          .slice(2)}`,
-        modelId: selectedModel.model_id,
-        formValues: batchSnapshotValues,
-        addedAt: Date.now() + index,
-      }),
-    );
-    const pendingIds = pendingItems.map((item) => item.id);
 
     const tabId = get().activeTabId;
+    if (!tabId) return;
 
     // Create AbortController for this batch run
     const controller = new AbortController();
-    if (tabId) abortControllers.set(tabId, controller);
+    addRunController(tabId, controller);
+    let releasedController = false;
+    const releaseController = () => {
+      if (releasedController) return hasActiveRuns(tabId);
+      releasedController = true;
+      return releaseRunController(tabId, controller);
+    };
 
     set((state) => ({
       tabs: state.tabs.map((tab) =>
@@ -1207,10 +1328,6 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
                 cancelRequested: false,
               },
               batchResults: [],
-              generationHistory: [
-                ...pendingItems,
-                ...tab.generationHistory,
-              ].slice(0, 200),
             }
           : tab,
       ),
@@ -1236,6 +1353,9 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
     // Process all requests concurrently
     const results: BatchResult[] = new Array(inputs.length);
+    const pendingIds: Array<string | null> = new Array(inputs.length).fill(
+      null,
+    );
 
     const promises = inputs.map(async (input, i) => {
       const startTime = Date.now();
@@ -1247,6 +1367,47 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
           {
             enableSyncMode: normalizedInput.enable_sync_mode as boolean,
             signal: controller.signal,
+            onSubmitted: (prediction) => {
+              if (!prediction.id) return;
+              pendingIds[i] = prediction.id;
+              const pendingItem = createPendingGenerationItem({
+                id: prediction.id,
+                modelId: selectedModel.model_id,
+                formValues: batchSnapshotValues,
+                prediction,
+                addedAt: Date.now() + i,
+              });
+              set((state) => ({
+                tabs: state.tabs.map((tab) =>
+                  tab.id === tabId && tab.batchState
+                    ? {
+                        ...tab,
+                        batchState: {
+                          ...tab.batchState,
+                          queue: tab.batchState.queue.map((item, idx) =>
+                            idx === i
+                              ? {
+                                  ...item,
+                                  id: prediction.id,
+                                  status: "running" as const,
+                                  result: prediction,
+                                }
+                              : item,
+                          ),
+                        },
+                        generationHistory: tab.generationHistory.some(
+                          (item) => item.id === prediction.id,
+                        )
+                          ? tab.generationHistory
+                          : [pendingItem, ...tab.generationHistory].slice(
+                              0,
+                              200,
+                            ),
+                      }
+                    : tab,
+                ),
+              }));
+            },
           },
         );
         const timing = Date.now() - startTime;
@@ -1266,7 +1427,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         });
 
         results[i] = {
-          id: queue[i].id,
+          id: result.id || pendingIds[i] || queue[i].id,
           index: i,
           input,
           prediction: result,
@@ -1286,7 +1447,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
                 : null;
             if (mType) {
               itemHistoryEntries.push({
-                id: `${result.id || queue[i].id}-${itemHistoryEntries.length}`,
+                id: `${result.id || pendingIds[i] || queue[i].id}-${itemHistoryEntries.length}`,
                 prediction: result,
                 outputs: [output],
                 formValues: batchSnapshotValues,
@@ -1302,7 +1463,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         }
         if (itemHistoryEntries.length === 0) {
           itemHistoryEntries.push({
-            id: result.id || queue[i].id,
+            id: result.id || pendingIds[i] || queue[i].id,
             prediction: result,
             outputs: batchOutputs,
             formValues: batchSnapshotValues,
@@ -1333,8 +1494,8 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
                   batchResults: results.filter(Boolean),
                   generationHistory: [
                     ...itemHistoryEntries,
-                    ...tab.generationHistory.filter(
-                      (historyItem) => historyItem.id !== pendingIds[i],
+                    ...tab.generationHistory.filter((item) =>
+                      pendingIds[i] ? item.id !== pendingIds[i] : true,
                     ),
                   ].slice(0, 200),
                 }
@@ -1355,7 +1516,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         const timing = Date.now() - startTime;
 
         results[i] = {
-          id: queue[i].id,
+          id: pendingIds[i] || queue[i].id,
           index: i,
           input,
           prediction: null,
@@ -1384,20 +1545,22 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
                     ),
                   },
                   batchResults: results.filter(Boolean),
-                  generationHistory: tab.generationHistory.map((historyItem) =>
-                    historyItem.id === pendingIds[i]
-                      ? {
-                          ...historyItem,
-                          status: "failed" as const,
-                          error: errorMessage,
-                          prediction: {
-                            ...historyItem.prediction,
-                            status: "failed" as const,
-                            error: errorMessage,
-                          },
-                        }
-                      : historyItem,
-                  ),
+                  generationHistory: pendingIds[i]
+                    ? tab.generationHistory.map((historyItem) =>
+                        historyItem.id === pendingIds[i]
+                          ? {
+                              ...historyItem,
+                              status: "failed" as const,
+                              error: errorMessage,
+                              prediction: {
+                                ...historyItem.prediction,
+                                status: "failed" as const,
+                                error: errorMessage,
+                              },
+                            }
+                          : historyItem,
+                      )
+                    : tab.generationHistory,
                 }
               : tab,
           ),
@@ -1409,28 +1572,22 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     await Promise.all(promises);
 
     // Finalize batch (history already updated per-item above)
+    const stillRunning = releaseController();
     set((state) => ({
       tabs: state.tabs.map((tab) =>
         tab.id === tabId
           ? {
               ...tab,
-              isRunning: false,
+              isRunning: stillRunning,
               error: null,
               batchState: tab.batchState
                 ? { ...tab.batchState, isRunning: false }
                 : null,
               batchResults: results.filter(Boolean),
-              generationHistory: controller.signal.aborted
-                ? tab.generationHistory.filter(
-                    (item) => !pendingIds.includes(item.id),
-                  )
-                : tab.generationHistory,
             }
           : tab,
       ),
     }));
-
-    if (tabId) abortControllers.delete(tabId);
   },
 
   cancelBatch: () => {

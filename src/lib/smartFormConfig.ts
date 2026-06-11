@@ -25,31 +25,74 @@ export interface SmartFormFamily {
   excludeFields?: string[];
 }
 
+export const IMAGE_FIELD_NAMES = [
+  "image",
+  "images",
+  "image_url",
+  "image_urls",
+  "input_image",
+  "input_images",
+  "input_image_url",
+  "input_image_urls",
+  "first_frame_image",
+  "first_frame_image_url",
+  "last_frame_image",
+  "last_frame_image_url",
+  "start_image",
+  "start_image_url",
+  "end_image",
+  "end_image_url",
+  "reference_image",
+  "reference_images",
+  "reference_image_url",
+  "reference_image_urls",
+];
+
+export const VIDEO_FIELD_NAMES = [
+  "video",
+  "videos",
+  "video_url",
+  "video_urls",
+  "input_video",
+  "input_videos",
+  "input_video_url",
+  "input_video_urls",
+  "reference_video",
+  "reference_videos",
+  "reference_video_url",
+  "reference_video_urls",
+];
+
+export const AUDIO_FIELD_NAMES = [
+  "audio",
+  "audios",
+  "audio_url",
+  "audio_urls",
+  "input_audio",
+  "input_audios",
+  "input_audio_url",
+  "input_audio_urls",
+  "reference_audio",
+  "reference_audios",
+  "reference_audio_url",
+  "reference_audio_urls",
+];
+
 // Helper to check if any file-like field is filled
 function hasFileField(filledFields: Set<string>, ...names: string[]): boolean {
   return names.some((n) => filledFields.has(n));
 }
 
 function hasImageFilled(filledFields: Set<string>): boolean {
-  return hasFileField(
-    filledFields,
-    "image",
-    "images",
-    "image_url",
-    "image_urls",
-    "input_image",
-  );
+  return hasFileField(filledFields, ...IMAGE_FIELD_NAMES);
 }
 
 function hasVideoFilled(filledFields: Set<string>): boolean {
-  return hasFileField(
-    filledFields,
-    "video",
-    "videos",
-    "video_url",
-    "video_urls",
-    "input_video",
-  );
+  return hasFileField(filledFields, ...VIDEO_FIELD_NAMES);
+}
+
+function hasAudioFilled(filledFields: Set<string>): boolean {
+  return hasFileField(filledFields, ...AUDIO_FIELD_NAMES);
 }
 
 function hasLorasFilled(filledFields: Set<string>): boolean {
@@ -60,6 +103,107 @@ function hasLorasFilled(filledFields: Set<string>): boolean {
 }
 
 export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
+  {
+    id: "gpt-image-2",
+    name: "GPT Image 2",
+    provider: "openai",
+    poster:
+      "https://static.wavespeed.ai/media/images/1763649945119973876_WvMIEAxu.jpg",
+    category: "image",
+    variantIds: [
+      "openai/gpt-image-2/text-to-image",
+      "openai/gpt-image-2",
+      "openai/gpt-image-2/edit",
+    ],
+    primaryVariant: "openai/gpt-image-2/text-to-image",
+    toggles: [],
+    resolveVariant(filledFields) {
+      return hasImageFilled(filledFields)
+        ? "openai/gpt-image-2/edit"
+        : "openai/gpt-image-2/text-to-image";
+    },
+  },
+
+  {
+    id: "seedance-2.0",
+    name: "Seedance 2.0",
+    provider: "bytedance",
+    poster:
+      "https://static.wavespeed.ai/media/images/1766494048998434655_qEMLsAI0.png",
+    category: "video",
+    variantIds: [
+      "bytedance/seedance-2.0/text-to-video",
+      "bytedance/seedance-2.0/image-to-video",
+      "bytedance/seedance-2.0/video-edit",
+      "bytedance/seedance-2.0/text-to-video-turbo",
+      "bytedance/seedance-2.0/image-to-video-turbo",
+      "bytedance/seedance-2.0/video-edit-turbo",
+      "bytedance/seedance-2.0-fast/text-to-video",
+      "bytedance/seedance-2.0-fast/image-to-video",
+      "bytedance/seedance-2.0-fast/video-edit",
+      "bytedance/seedance-2.0-fast/text-to-video-turbo",
+      "bytedance/seedance-2.0-fast/image-to-video-turbo",
+      "bytedance/seedance-2.0-fast/video-edit-turbo",
+      "bytedance/seedance-v2.0/text-to-video",
+      "bytedance/seedance-v2.0/image-to-video",
+      "bytedance/seedance-v2.0/video-edit",
+      "bytedance/seedance-v2/text-to-video",
+      "bytedance/seedance-v2/image-to-video",
+      "bytedance/seedance-v2/video-edit",
+    ],
+    primaryVariant: "bytedance/seedance-2.0/text-to-video",
+    toggles: [
+      {
+        key: "mode",
+        labelKey: "smartPlayground.toggleMode",
+        options: [
+          {
+            value: "image",
+            labelKey: "smartPlayground.modeImageToVideo",
+          },
+          {
+            value: "video",
+            labelKey: "smartPlayground.modeVideoToVideo",
+          },
+        ],
+        default: "image",
+      },
+      {
+        key: "speed",
+        labelKey: "smartPlayground.toggleSpeed",
+        options: [
+          { value: "normal", labelKey: "smartPlayground.qualityStd" },
+          { value: "fast", labelKey: "smartPlayground.speedFast" },
+        ],
+        default: "normal",
+      },
+      {
+        key: "mode",
+        labelKey: "smartPlayground.toggleMode",
+        options: [
+          { value: "generate", labelKey: "smartPlayground.modeGenerate" },
+          { value: "edit", labelKey: "smartPlayground.modeEdit" },
+        ],
+        default: "generate",
+      },
+    ],
+    resolveVariant(filledFields, toggleValues) {
+      const hasImage = hasImageFilled(filledFields);
+      const isEdit = toggleValues.mode === "edit";
+      const isFast = toggleValues.speed === "fast";
+      const base = isFast
+        ? "bytedance/seedance-2.0-fast"
+        : "bytedance/seedance-2.0";
+      if (isEdit || hasVideoFilled(filledFields)) {
+        return `${base}/video-edit`;
+      }
+      if (hasImage) {
+        return `${base}/image-to-video`;
+      }
+      return `${base}/text-to-video`;
+    },
+  },
+
   // 1. Seedream 4.5
   {
     id: "seedream-4.5",
@@ -161,10 +305,12 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
     toggles: [],
     resolveVariant(filledFields) {
       const hasVideo = hasVideoFilled(filledFields);
+      const hasAudio = hasAudioFilled(filledFields);
       const hasLoras = hasLorasFilled(filledFields);
       if (hasVideo && hasLoras)
         return "wavespeed-ai/wan-2.2-spicy/video-extend-lora";
       if (hasVideo) return "wavespeed-ai/wan-2.2-spicy/video-extend";
+      if (hasAudio) return "wavespeed-ai/wan-2.2-spicy/image-to-video";
       if (hasLoras) return "wavespeed-ai/wan-2.2-spicy/image-to-video-lora";
       return "wavespeed-ai/wan-2.2-spicy/image-to-video";
     },
@@ -206,6 +352,21 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
     primaryVariant: "wavespeed-ai/infinitetalk",
     toggles: [
       {
+        key: "mode",
+        labelKey: "smartPlayground.toggleMode",
+        options: [
+          {
+            value: "image",
+            labelKey: "smartPlayground.modeImageToVideo",
+          },
+          {
+            value: "video",
+            labelKey: "smartPlayground.modeVideoToVideo",
+          },
+        ],
+        default: "image",
+      },
+      {
         key: "speed",
         labelKey: "smartPlayground.toggleSpeed",
         options: [
@@ -217,12 +378,13 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
     ],
     resolveVariant(filledFields, toggleValues) {
       const hasVideo = hasVideoFilled(filledFields);
+      const isVideoMode = toggleValues.mode === "video";
       const isFast = toggleValues.speed === "fast";
       const hasLeftAudio = filledFields.has("left_audio");
       const hasRightAudio = filledFields.has("right_audio");
       const hasBothAudios = hasLeftAudio && hasRightAudio;
 
-      if (hasVideo)
+      if (isVideoMode || hasVideo)
         return isFast
           ? "wavespeed-ai/infinitetalk-fast/video-to-video"
           : "wavespeed-ai/infinitetalk/video-to-video";
@@ -331,4 +493,23 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
 
 export function findFamilyById(id: string): SmartFormFamily | undefined {
   return SMART_FORM_FAMILIES.find((f) => f.id === id);
+}
+
+export function findFamilyByVariantId(
+  modelId: string | undefined | null,
+): SmartFormFamily | undefined {
+  if (!modelId) return undefined;
+  return SMART_FORM_FAMILIES.find((f) => f.variantIds.includes(modelId));
+}
+
+export function getFilledFieldNames(
+  values: Record<string, unknown>,
+): Set<string> {
+  const filled = new Set<string>();
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    filled.add(key);
+  }
+  return filled;
 }

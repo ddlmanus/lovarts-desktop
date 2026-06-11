@@ -1,7 +1,9 @@
 import type { GenerationHistoryItem, HistoryItem } from "@/types/prediction";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { isImageUrl, isVideoUrl } from "@/lib/mediaUtils";
 import { cn } from "@/lib/utils";
+import { queueCanvasImport } from "@/workflow/lib/pendingCanvasImport";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +13,8 @@ import {
 import {
   AlertCircle,
   Download,
-  ExternalLink,
   FileText,
+  Import as ImportIcon,
   Loader2,
   RefreshCw,
   Trash2,
@@ -42,6 +44,7 @@ interface MyGenerationsPanelProps {
   localHistory: GenerationHistoryItem[];
   remoteHistory: HistoryItem[];
   isLoading?: boolean;
+  preferRemoteHistory?: boolean;
   onRefresh?: () => void;
   onShowExamples?: () => void;
   onDelete?: (item: GenerationCard) => void | Promise<void>;
@@ -79,6 +82,18 @@ function formatDate(value: number) {
   });
 }
 
+function getFileNameFromUrl(url: string, model?: string) {
+  try {
+    const { pathname } = new URL(url);
+    const name = decodeURIComponent(pathname.split("/").pop() || "");
+    if (name) return name;
+  } catch {
+    // Fall through to a generated name for non-standard URLs.
+  }
+  const suffix = model ? model.split("/").pop() : "generation";
+  return `${suffix || "generation"}.png`;
+}
+
 function toLocalCard(item: GenerationHistoryItem): GenerationCard {
   const media = getFirstMedia(item.outputs);
   return {
@@ -111,21 +126,35 @@ function toRemoteCard(item: HistoryItem): GenerationCard {
   };
 }
 
+function isRunningStatus(status: string | undefined | null) {
+  return (
+    status === "created" ||
+    status === "pending" ||
+    status === "processing" ||
+    status === "queued" ||
+    status === "running" ||
+    status === "starting"
+  );
+}
+
+function isOutputlessPlaceholder(item: GenerationCard) {
+  return !item.thumbnailUrl && item.outputs.length === 0;
+}
+
 function GenerationCardView({
   item,
   onPreview,
+  onOpenInCanvas,
   onDelete,
   isDeleting,
 }: {
   item: GenerationCard;
   onPreview: (preview: GenerationPreview) => void;
+  onOpenInCanvas: (item: GenerationCard, url: string) => void;
   onDelete?: (item: GenerationCard) => void | Promise<void>;
   isDeleting?: boolean;
 }) {
-  const isRunning =
-    item.status === "created" ||
-    item.status === "pending" ||
-    item.status === "processing";
+  const isRunning = isRunningStatus(item.status);
   const isFailed = item.status === "failed";
   const firstUrl = item.thumbnailUrl || extractUrl(item.outputs[0]);
   const canPreview =
@@ -234,26 +263,26 @@ function GenerationCardView({
         <div className="flex shrink-0 items-center gap-1 opacity-80 transition-opacity group-hover:opacity-100">
           {firstUrl && !isRunning && !isFailed && (
             <>
-            <a
-              href={firstUrl}
-              download
-              onClick={(event) => event.stopPropagation()}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#9ca3af] hover:bg-white/8 hover:text-white"
-              title="下载"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </a>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                window.open(firstUrl, "_blank", "noopener,noreferrer");
-              }}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#9ca3af] hover:bg-white/8 hover:text-white"
-              title="打开"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </button>
+              <a
+                href={firstUrl}
+                download
+                onClick={(event) => event.stopPropagation()}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#9ca3af] hover:bg-white/8 hover:text-white"
+                title="下载"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </a>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenInCanvas(item, firstUrl);
+                }}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#9ca3af] hover:bg-white/8 hover:text-white"
+                title="导入画布"
+              >
+                <ImportIcon className="h-3.5 w-3.5" />
+              </button>
             </>
           )}
           {onDelete && (
@@ -284,20 +313,49 @@ export function MyGenerationsPanel({
   localHistory,
   remoteHistory,
   isLoading,
+  preferRemoteHistory = false,
   onRefresh,
   onShowExamples,
   onDelete,
 }: MyGenerationsPanelProps) {
+  const navigate = useNavigate();
   const [preview, setPreview] = useState<GenerationPreview | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const localCards = localHistory.map(toLocalCard);
+  const remoteIds = new Set(remoteHistory.map((item) => item.id));
+  const localCards = localHistory.map(toLocalCard).filter((item) => {
+    if (isRunningStatus(item.status)) {
+      return !(
+        preferRemoteHistory &&
+        item.predictionId &&
+        remoteIds.has(item.predictionId)
+      );
+    }
+    if (preferRemoteHistory) return false;
+    return !(item.predictionId && remoteIds.has(item.predictionId));
+  });
   const localIds = new Set(localCards.map((item) => item.id));
-  const remoteCards = remoteHistory
-    .map(toRemoteCard)
-    .filter((item) => !localIds.has(item.id));
-  const cards = [...localCards, ...remoteCards].sort(
-    (a, b) => b.createdAt - a.createdAt,
+  const localPredictionIds = new Set(
+    localCards
+      .map((item) => item.predictionId)
+      .filter((id): id is string => Boolean(id)),
   );
+  const localRunningModels = new Set(
+    localCards
+      .filter((item) => isRunningStatus(item.status))
+      .map((item) => item.model),
+  );
+  const remoteCards = remoteHistory.map(toRemoteCard).filter((item) => {
+    if (localIds.has(item.id)) return false;
+    if (!preferRemoteHistory && localPredictionIds.has(item.id)) return false;
+    if (!localRunningModels.has(item.model)) return true;
+    return !isRunningStatus(item.status) && !isOutputlessPlaceholder(item);
+  });
+  const cards = [...localCards, ...remoteCards].sort((a, b) => {
+    const runningDiff =
+      Number(isRunningStatus(b.status)) - Number(isRunningStatus(a.status));
+    if (runningDiff !== 0) return runningDiff;
+    return b.createdAt - a.createdAt;
+  });
 
   const handleDelete = async (item: GenerationCard) => {
     if (!onDelete || deletingId) return;
@@ -305,12 +363,29 @@ export function MyGenerationsPanel({
     setDeletingId(key);
     try {
       await onDelete(item);
-      if (preview?.url && item.outputs.some((output) => extractUrl(output) === preview.url)) {
+      if (
+        preview?.url &&
+        item.outputs.some((output) => extractUrl(output) === preview.url)
+      ) {
         setPreview(null);
       }
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const handleOpenInCanvas = (item: GenerationCard, url: string) => {
+    const mediaType =
+      item.thumbnailType || (isVideoUrl(url) ? "video" : "image");
+    queueCanvasImport({
+      url,
+      mediaType,
+      fileName: getFileNameFromUrl(url, item.model),
+      label: item.model,
+      source: "generation",
+    });
+    setPreview(null);
+    navigate("/workflow");
   };
 
   return (
@@ -365,6 +440,7 @@ export function MyGenerationsPanel({
                   key={`${item.source}-${item.id}`}
                   item={item}
                   onPreview={setPreview}
+                  onOpenInCanvas={handleOpenInCanvas}
                   onDelete={onDelete ? handleDelete : undefined}
                   isDeleting={deletingId === `${item.source}-${item.id}`}
                 />
@@ -428,11 +504,23 @@ export function MyGenerationsPanel({
                 <button
                   type="button"
                   onClick={() =>
-                    window.open(preview.url, "_blank", "noopener,noreferrer")
+                    handleOpenInCanvas(
+                      {
+                        id: preview.url,
+                        model: preview.model,
+                        status: "completed",
+                        createdAt: preview.createdAt,
+                        outputs: [preview.url],
+                        thumbnailUrl: preview.url,
+                        thumbnailType: preview.type,
+                        source: "local",
+                      },
+                      preview.url,
+                    )
                   }
                   className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-[#d1d5db] hover:bg-white/8 hover:text-white"
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ImportIcon className="h-4 w-4" />
                   打开
                 </button>
                 <button

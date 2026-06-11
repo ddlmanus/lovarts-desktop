@@ -176,6 +176,7 @@ export interface RunOptions {
   pollInterval?: number;
   enableSyncMode?: boolean;
   signal?: AbortSignal;
+  onSubmitted?: (prediction: PredictionResult) => void;
 }
 
 export interface HistoryFilters {
@@ -265,6 +266,7 @@ class WaveSpeedClient {
       if (key) {
         config.headers.Authorization = `Bearer ${key}`;
       }
+      config.baseURL = this.getBaseUrl();
       return config;
     });
   }
@@ -290,10 +292,11 @@ class WaveSpeedClient {
   }
 
   private isOfficialWaveSpeedBaseUrl(): boolean {
+    const baseUrl = this.getBaseUrl();
     try {
-      return new URL(this.baseUrl).hostname === "api.wavespeed.ai";
+      return new URL(baseUrl).hostname === "api.wavespeed.ai";
     } catch {
-      return this.baseUrl.replace(/\/+$/, "") === DEFAULT_API_BASE_URL;
+      return baseUrl.replace(/\/+$/, "") === DEFAULT_API_BASE_URL;
     }
   }
 
@@ -435,6 +438,7 @@ class WaveSpeedClient {
         { ...input, enable_sync_mode: true },
         { timeout: 120000, signal },
       );
+      options.onSubmitted?.(result);
       return result;
     }
 
@@ -446,6 +450,7 @@ class WaveSpeedClient {
     if (!requestId) {
       throw new Error("No request ID in response");
     }
+    options.onSubmitted?.(prediction);
 
     // Poll for result with unlimited retry on connection errors
     const startTime = Date.now();
@@ -938,6 +943,10 @@ class WorkflowClient extends WaveSpeedClient {
   /** Always delegate to apiClient so key stays in sync automatically. */
   override getApiKey(): string {
     return apiClient.getApiKey();
+  }
+  /** Always follow the active desktop gateway base URL. */
+  override getBaseUrl(): string {
+    return apiClient.getBaseUrl();
   }
 }
 export const workflowClient = new WorkflowClient();
