@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "Çıktıları oyun alanından manuel olarak kaydedebilirsiniz",
       "directory": "Varlıklar Klasörü",
       "directoryDesc": "Oluşturulan çıktılarınızın nereye kaydedileceğini seçin",
-      "defaultDirectory": "Belgelerim/WaveSpeed",
+      "defaultDirectory": "Belgelerim/Lovarts",
       "browse": "Gözat",
       "directoryChanged": "Klasör değiştirildi",
       "directoryChangedDesc": "Yeni çıktılar {{path}} konumuna kaydedilecek",

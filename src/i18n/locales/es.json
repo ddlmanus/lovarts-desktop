@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "Aún puedes guardar las salidas manualmente desde el playground",
       "directory": "Directorio de recursos",
       "directoryDesc": "Elige dónde guardar tus salidas generadas",
-      "defaultDirectory": "Documentos/WaveSpeed",
+      "defaultDirectory": "Documentos/Lovarts",
       "browse": "Explorar",
       "directoryChanged": "Directorio cambiado",
       "directoryChangedDesc": "Las nuevas salidas se guardarán en {{path}}",

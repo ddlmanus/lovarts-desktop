@@ -630,7 +630,7 @@
       "autoSaveDisabledDesc": "يمكنك حفظ المخرجات يدوياً من ساحة التجربة",
       "directory": "دليل الأصول",
       "directoryDesc": "اختر مكان حفظ المخرجات المولدة",
-      "defaultDirectory": "مستندات/WaveSpeed",
+      "defaultDirectory": "مستندات/Lovarts",
       "browse": "تصفح",
       "directoryChanged": "تم تغيير الدليل",
       "directoryChangedDesc": "سيتم حفظ المخرجات الجديدة في {{path}}",

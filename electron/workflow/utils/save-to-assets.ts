@@ -22,7 +22,11 @@ import { join, extname } from "path";
 const userDataPath = app.getPath("userData");
 const settingsPath = join(userDataPath, "settings.json");
 const assetsMetadataPath = join(userDataPath, "assets-metadata.json");
-const defaultAssetsDirectory = join(app.getPath("documents"), "WaveSpeed");
+const legacyDefaultAssetsDirectory = join(
+  app.getPath("documents"),
+  "WaveSpeed",
+);
+const defaultAssetsDirectory = join(app.getPath("documents"), "Lovarts");
 
 interface AssetMetadata {
   id: string;
@@ -47,9 +51,13 @@ function loadSettings(): { autoSaveAssets: boolean; assetsDirectory: string } {
   try {
     if (existsSync(settingsPath)) {
       const data = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      const assetsDirectory =
+        data.assetsDirectory === legacyDefaultAssetsDirectory
+          ? defaultAssetsDirectory
+          : data.assetsDirectory || defaultAssetsDirectory;
       return {
         autoSaveAssets: data.autoSaveAssets ?? true,
-        assetsDirectory: data.assetsDirectory || defaultAssetsDirectory,
+        assetsDirectory,
       };
     }
   } catch {

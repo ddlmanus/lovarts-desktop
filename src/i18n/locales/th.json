@@ -630,7 +630,7 @@
       "autoSaveDisabledDesc": "คุณยังสามารถบันทึกผลลัพธ์ด้วยตนเองจากสนามทดสอบได้",
       "directory": "ไดเรกทอรีทรัพย์สิน",
       "directoryDesc": "เลือกตำแหน่งที่จะบันทึกผลลัพธ์ที่สร้างของคุณ",
-      "defaultDirectory": "เอกสาร/WaveSpeed",
+      "defaultDirectory": "เอกสาร/Lovarts",
       "browse": "เรียกดู",
       "directoryChanged": "เปลี่ยนไดเรกทอรีแล้ว",
       "directoryChangedDesc": "ผลลัพธ์ใหม่จะถูกบันทึกไปยัง {{path}}",

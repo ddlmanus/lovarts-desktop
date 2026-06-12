@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "आप अभी भी प्लेग्राउंड से आउटपुट को मैन्युअल रूप से सहेज सकते हैं",
       "directory": "संपत्ति निर्देशिका",
       "directoryDesc": "चुनें कि अपने उत्पन्न आउटपुट कहां सहेजें",
-      "defaultDirectory": "दस्तावेज़/WaveSpeed",
+      "defaultDirectory": "दस्तावेज़/Lovarts",
       "browse": "ब्राउज़ करें",
       "directoryChanged": "निर्देशिका बदली गई",
       "directoryChangedDesc": "नए आउटपुट {{path}} में सहेजे जाएंगे",

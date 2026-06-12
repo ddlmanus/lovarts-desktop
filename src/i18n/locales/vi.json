@@ -630,7 +630,7 @@
       "autoSaveDisabledDesc": "Bạn vẫn có thể lưu đầu ra thủ công từ sân chơi",
       "directory": "Thư mục Tài sản",
       "directoryDesc": "Chọn nơi lưu đầu ra đã tạo của bạn",
-      "defaultDirectory": "Tài liệu/WaveSpeed",
+      "defaultDirectory": "Tài liệu/Lovarts",
       "browse": "Duyệt",
       "directoryChanged": "Đã đổi thư mục",
       "directoryChangedDesc": "Đầu ra mới sẽ được lưu vào {{path}}",

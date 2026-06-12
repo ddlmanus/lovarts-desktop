@@ -630,7 +630,7 @@
       "autoSaveDisabledDesc": "Anda masih boleh menyimpan output secara manual dari playground",
       "directory": "Direktori Aset",
       "directoryDesc": "Pilih tempat untuk menyimpan output yang dijana",
-      "defaultDirectory": "Dokumen/WaveSpeed",
+      "defaultDirectory": "Dokumen/Lovarts",
       "browse": "Layari",
       "directoryChanged": "Direktori ditukar",
       "directoryChangedDesc": "Output baharu akan disimpan ke {{path}}",

@@ -432,7 +432,11 @@ function saveState(state: Record<string, unknown>): void {
   }
 }
 
-const defaultAssetsDirectory = join(app.getPath("documents"), "WaveSpeed");
+const legacyDefaultAssetsDirectory = join(
+  app.getPath("documents"),
+  "WaveSpeed",
+);
+const defaultAssetsDirectory = join(app.getPath("documents"), "Lovarts");
 const assetsMetadataPath = join(userDataPath, "assets-metadata.json");
 
 const defaultSettings: Settings = {
@@ -456,9 +460,18 @@ function normalizeApiBaseUrl(value?: string | null): string {
     .replace(/\/+$/, "");
 }
 
+function normalizeAssetsDirectory(value?: string | null): string {
+  const directory = String(value || "").trim();
+  if (!directory || directory === legacyDefaultAssetsDirectory) {
+    return defaultAssetsDirectory;
+  }
+  return directory;
+}
+
 function normalizeSettings(settings: Settings): Settings {
   const apiBaseUrl = normalizeApiBaseUrl(settings.apiBaseUrl);
   const customApiBaseUrl = normalizeApiBaseUrl(settings.customApiBaseUrl);
+  const assetsDirectory = normalizeAssetsDirectory(settings.assetsDirectory);
   if (
     settings.apiServiceId === "wavespeed" ||
     settings.apiServiceId === "ideart-local" ||
@@ -470,12 +483,14 @@ function normalizeSettings(settings: Settings): Settings {
       apiServiceId: "ideart-production",
       apiBaseUrl: "https://lovarts.art",
       customApiBaseUrl: "",
+      assetsDirectory,
     };
   }
   return {
     ...settings,
     apiBaseUrl: apiBaseUrl || defaultSettings.apiBaseUrl,
     customApiBaseUrl,
+    assetsDirectory,
   };
 }
 

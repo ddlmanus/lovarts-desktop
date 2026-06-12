@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "Puoi comunque salvare gli output manualmente dal playground",
       "directory": "Cartella Asset",
       "directoryDesc": "Scegli dove salvare i tuoi output generati",
-      "defaultDirectory": "Documenti/WaveSpeed",
+      "defaultDirectory": "Documenti/Lovarts",
       "browse": "Sfoglia",
       "directoryChanged": "Cartella cambiata",
       "directoryChangedDesc": "I nuovi output verranno salvati in {{path}}",

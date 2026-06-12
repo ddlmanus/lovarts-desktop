@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "Вы всё ещё можете сохранять результаты вручную из playground",
       "directory": "Папка Активов",
       "directoryDesc": "Выберите, куда сохранять сгенерированные результаты",
-      "defaultDirectory": "Документы/WaveSpeed",
+      "defaultDirectory": "Документы/Lovarts",
       "browse": "Обзор",
       "directoryChanged": "Папка изменена",
       "directoryChangedDesc": "Новые результаты будут сохраняться в {{path}}",

@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "Anda masih bisa menyimpan output secara manual dari playground",
       "directory": "Direktori Aset",
       "directoryDesc": "Pilih tempat untuk menyimpan output yang dihasilkan",
-      "defaultDirectory": "Dokumen/WaveSpeed",
+      "defaultDirectory": "Dokumen/Lovarts",
       "browse": "Telusuri",
       "directoryChanged": "Direktori diubah",
       "directoryChangedDesc": "Output baru akan disimpan ke {{path}}",

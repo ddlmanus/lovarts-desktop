@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "Sie können Ausgaben weiterhin manuell vom Playground aus speichern",
       "directory": "Assets-Verzeichnis",
       "directoryDesc": "Wählen Sie, wo Ihre generierten Ausgaben gespeichert werden sollen",
-      "defaultDirectory": "Dokumente/WaveSpeed",
+      "defaultDirectory": "Dokumente/Lovarts",
       "browse": "Durchsuchen",
       "directoryChanged": "Verzeichnis geändert",
       "directoryChangedDesc": "Neue Ausgaben werden in {{path}} gespeichert",

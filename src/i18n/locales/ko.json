@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "플레이그라운드에서 수동으로 출력을 저장할 수 있습니다",
       "directory": "에셋 디렉토리",
       "directoryDesc": "생성된 출력을 저장할 위치를 선택하세요",
-      "defaultDirectory": "문서/WaveSpeed",
+      "defaultDirectory": "문서/Lovarts",
       "browse": "찾아보기",
       "directoryChanged": "디렉토리 변경됨",
       "directoryChangedDesc": "새 출력이 {{path}}에 저장됩니다",

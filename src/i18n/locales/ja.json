@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "プレイグラウンドから手動で出力を保存できます",
       "directory": "アセットディレクトリ",
       "directoryDesc": "生成された出力を保存する場所を選択",
-      "defaultDirectory": "ドキュメント/WaveSpeed",
+      "defaultDirectory": "ドキュメント/Lovarts",
       "browse": "参照",
       "directoryChanged": "ディレクトリを変更しました",
       "directoryChangedDesc": "新しい出力は{{path}}に保存されます",

@@ -660,7 +660,7 @@
       "autoSaveDisabledDesc": "You can still save outputs manually from the playground",
       "directory": "Assets Directory",
       "directoryDesc": "Choose where to save your generated outputs",
-      "defaultDirectory": "Documents/WaveSpeed",
+      "defaultDirectory": "Documents/Lovarts",
       "browse": "Browse",
       "directoryChanged": "Directory changed",
       "directoryChangedDesc": "New outputs will be saved to {{path}}",

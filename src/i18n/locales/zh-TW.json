@@ -633,7 +633,7 @@
       "autoSaveDisabledDesc": "您仍可從演練場手動儲存輸出",
       "directory": "資產目錄",
       "directoryDesc": "選擇儲存產生輸出的位置",
-      "defaultDirectory": "文件/WaveSpeed",
+      "defaultDirectory": "文件/Lovarts",
       "browse": "瀏覽",
       "directoryChanged": "目錄已變更",
       "directoryChangedDesc": "新輸出將儲存至 {{path}}",

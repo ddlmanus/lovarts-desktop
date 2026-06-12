@@ -631,7 +631,7 @@
       "autoSaveDisabledDesc": "Vous pouvez toujours enregistrer les sorties manuellement depuis le playground",
       "directory": "Répertoire des ressources",
       "directoryDesc": "Choisissez où enregistrer vos sorties générées",
-      "defaultDirectory": "Documents/WaveSpeed",
+      "defaultDirectory": "Documents/Lovarts",
       "browse": "Parcourir",
       "directoryChanged": "Répertoire modifié",
       "directoryChangedDesc": "Les nouvelles sorties seront enregistrées dans {{path}}",
