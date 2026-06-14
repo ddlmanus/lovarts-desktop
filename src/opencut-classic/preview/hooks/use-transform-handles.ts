@@ -1,0 +1,97 @@
+import { useEffect, useReducer, useState } from "react";
+import { usePreviewViewport } from "@/opencut-classic/preview/components/preview-viewport";
+import type { OnSnapLinesChange } from "@/opencut-classic/preview/hooks/use-preview-interaction";
+import { useEditor } from "@/opencut-classic/editor/use-editor";
+import { useCommittedRef } from "@/opencut-classic/hooks/use-committed-ref";
+import { useShiftKey } from "@/opencut-classic/hooks/use-shift-key";
+import { registerCanceller } from "@/opencut-classic/editor/cancel-interaction";
+import {
+	TransformHandleController,
+	type TransformHandleDeps,
+} from "@/opencut-classic/preview/controllers/transform-handle-controller";
+import type { SceneTracks } from "@/opencut-classic/timeline";
+
+const EMPTY_SCENE_TRACKS: SceneTracks = {
+	overlay: [],
+	main: {
+		id: "empty-main-track",
+		name: "Main",
+		type: "video",
+		elements: [],
+		muted: false,
+		hidden: false,
+	},
+	audio: [],
+};
+
+export function useTransformHandles({
+	onSnapLinesChange,
+}: {
+	onSnapLinesChange?: OnSnapLinesChange;
+}) {
+	const viewport = usePreviewViewport();
+	const editor = useEditor();
+	const isShiftHeldRef = useShiftKey();
+	const selectedElements = useEditor((e) => e.selection.getSelectedElements());
+	const tracks = useEditor(
+		(e) =>
+			e.timeline.getPreviewTracks() ??
+			e.scenes.getActiveSceneOrNull()?.tracks ??
+			EMPTY_SCENE_TRACKS,
+	);
+	const currentTime = useEditor((e) => e.playback.getCurrentTime());
+	const mediaAssets = useEditor((e) => e.media.getAssets());
+	const canvasSize = useEditor(
+		(e) => e.project.getActive().settings.canvasSize,
+	);
+	const deps: TransformHandleDeps = {
+		viewport,
+		input: {
+			isShiftHeld: () => isShiftHeldRef.current,
+		},
+		scene: {
+			getSelectedElements: () => selectedElements,
+			getTracks: () => tracks,
+			getCurrentTime: () => currentTime,
+			getMediaAssets: () => mediaAssets,
+			getCanvasSize: () => canvasSize,
+		},
+		timeline: {
+			previewElements: (updates) =>
+				editor.timeline.previewElements({ updates }),
+			commitPreview: () => editor.timeline.commitPreview(),
+			discardPreview: () => editor.timeline.discardPreview(),
+		},
+		preview: {
+			onSnapLinesChange,
+		},
+	};
+	const depsRef = useCommittedRef(deps);
+	const [controller] = useState(
+		() => new TransformHandleController({ depsRef }),
+	);
+
+	const [, rerender] = useReducer((n: number) => n + 1, 0);
+	useEffect(() => controller.subscribe(rerender), [controller]);
+
+	useEffect(() => {
+		if (!controller.isActive) return;
+		return registerCanceller({ fn: () => controller.cancel() });
+	}, [controller, controller.isActive]);
+
+	useEffect(() => () => controller.destroy(), [controller]);
+
+	const selectedWithBounds = controller.selectedWithBounds;
+	const hasVisualSelection = selectedWithBounds !== null;
+
+	return {
+		selectedWithBounds,
+		hasVisualSelection,
+		activeHandle: controller.activeHandle,
+		handleCornerPointerDown: controller.onCornerPointerDown,
+		handleEdgePointerDown: controller.onEdgePointerDown,
+		handleRotationPointerDown: controller.onRotationPointerDown,
+		handlePointerMove: controller.onPointerMove,
+		handlePointerUp: controller.onPointerUp,
+	};
+}

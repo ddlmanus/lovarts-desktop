@@ -2,6 +2,8 @@ import { resolve } from "path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
+import wasm from "vite-plugin-wasm";
+import topLevelAwait from "vite-plugin-top-level-await";
 
 // Stub Capacitor modules for desktop dev server (they only run on mobile)
 const CAPACITOR_MODULES = [
@@ -50,9 +52,16 @@ export default defineConfig({
       alias: {
         "@": resolve(__dirname, "src"),
         "@mobile": resolve(__dirname, "mobile/src"),
+        "next/link": resolve(__dirname, "src/opencut-compat/next-link.tsx"),
+        "next/image": resolve(__dirname, "src/opencut-compat/next-image.tsx"),
+        "next/navigation": resolve(
+          __dirname,
+          "src/opencut-compat/next-navigation.ts",
+        ),
+        "next-themes": resolve(__dirname, "src/opencut-compat/next-themes.tsx"),
       },
     },
-    plugins: [stubCapacitorPlugin(), react()],
+    plugins: [stubCapacitorPlugin(), wasm(), topLevelAwait(), react()],
     build: {
       rollupOptions: {
         input: resolve(__dirname, "index.html"),

@@ -18,6 +18,12 @@
     --muted-foreground: 220 8% 65%;
     --accent: 0 0% 18%;
     --accent-foreground: 0 0% 96%;
+    --popover-hover: 0 0% 18%;
+    --secondary-border: 0 0% 20%;
+    --constructive: 141 71% 48%;
+    --constructive-foreground: 0 0% 100%;
+    --caution: 38 92% 55%;
+    --caution-foreground: 0 0% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
     --border: 0 0% 18%;
@@ -50,6 +56,14 @@
     --playground-tab-active: 0 0% 21%;
     --playground-border: 0 0% 18%;
     --playground-accent: 72 100% 48%;
+    --sidebar-background: var(--playground-sidebar);
+    --sidebar-foreground: var(--playground-sidebar-foreground);
+    --sidebar-primary: var(--playground-sidebar-foreground);
+    --sidebar-primary-foreground: var(--playground-sidebar);
+    --sidebar-accent: var(--playground-sidebar-active);
+    --sidebar-accent-foreground: var(--playground-sidebar-foreground);
+    --sidebar-border: var(--playground-border);
+    --sidebar-ring: var(--playground-accent);
   }
 
   .dark {
@@ -67,6 +81,8 @@
     --muted-foreground: 215 20% 60%;
     --accent: 217 50% 18%;
     --accent-foreground: 217 91% 75%;
+    --popover-hover: 217 35% 16%;
+    --secondary-border: 217 30% 20%;
     --destructive: 0 62.8% 50%;
     --destructive-foreground: 0 0% 100%;
     --border: 217 25% 16%;
@@ -102,11 +118,246 @@
   --muted-foreground: 220 8% 65%;
   --accent: 0 0% 18%;
   --accent-foreground: 0 0% 96%;
+  --popover-hover: 0 0% 20%;
+  --secondary-border: 0 0% 20%;
   --border: var(--playground-border);
   --input: 0 0% 16%;
   --ring: var(--playground-accent);
   --content-area: var(--playground-canvas);
   --panel-bg: var(--playground-surface);
+  --sidebar-background: var(--playground-sidebar);
+  --sidebar-foreground: var(--playground-sidebar-foreground);
+  --sidebar-primary: var(--playground-sidebar-foreground);
+  --sidebar-primary-foreground: var(--playground-sidebar);
+  --sidebar-accent: var(--playground-sidebar-active);
+  --sidebar-accent-foreground: var(--playground-sidebar-foreground);
+  --sidebar-border: var(--playground-border);
+  --sidebar-ring: var(--playground-accent);
+}
+
+.opencut-editor {
+  --background: 0 0% 5%;
+  --foreground: var(--playground-sidebar-foreground);
+  --card: 0 0% 9%;
+  --card-foreground: var(--playground-sidebar-foreground);
+  --popover: 0 0% 10%;
+  --popover-hover: 0 0% 17%;
+  --popover-foreground: var(--playground-sidebar-foreground);
+  --primary: var(--playground-accent);
+  --primary-foreground: 0 0% 5%;
+  --secondary: 0 0% 13%;
+  --secondary-border: 0 0% 17%;
+  --secondary-foreground: 0 0% 95%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 220 7% 62%;
+  --accent: 0 0% 14%;
+  --accent-foreground: 0 0% 96%;
+  --border: 0 0% 15%;
+  --input: 0 0% 12%;
+  --ring: var(--playground-accent);
+  --constructive: 141 71% 48%;
+  --constructive-foreground: 0 0% 100%;
+  --caution: 38 92% 55%;
+  --caution-foreground: 0 0% 10%;
+}
+
+.opencut-editor .panel {
+  --background: 0 0% 8%;
+  --foreground: var(--playground-sidebar-foreground);
+  --card: 0 0% 11%;
+  --card-foreground: var(--playground-sidebar-foreground);
+  --popover: 0 0% 10%;
+  --popover-hover: 0 0% 17%;
+  --popover-foreground: var(--playground-sidebar-foreground);
+  --secondary: 0 0% 13%;
+  --secondary-border: 0 0% 17%;
+  --secondary-foreground: 0 0% 95%;
+  --muted: 0 0% 13%;
+  --muted-foreground: 220 7% 62%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 96%;
+  --border: 0 0% 16%;
+  --input: 0 0% 12%;
+  --ring: var(--playground-accent);
+}
+
+.opencut-editor .lovarts-cut-header {
+  background: hsl(0 0% 6%);
+}
+
+.opencut-editor .lovarts-properties-panel {
+  font-size: 12px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.opencut-editor .lovarts-properties-panel [role="combobox"],
+.opencut-editor .lovarts-properties-panel input,
+.opencut-editor .lovarts-properties-panel textarea {
+  font-size: 12px !important;
+  line-height: 16px !important;
+}
+
+.opencut-editor .lovarts-properties-panel input {
+  height: auto;
+}
+
+.opencut-editor .lovarts-properties-panel [role="combobox"] {
+  min-height: 28px;
+}
+
+.opencut-editor .lovarts-properties-panel .property-title {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.opencut-editor .lovarts-properties-panel .property-feature-title {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.opencut-editor .lovarts-properties-panel .property-feature-hint {
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.opencut-editor .lovarts-properties-panel .property-hint {
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.opencut-editor .lovarts-properties-panel .property-label {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.opencut-editor .panel,
+.opencut-editor [data-panel-group] {
+  box-shadow: none;
+}
+
+.opencut-editor [data-panel-resize-handle-id] {
+  background: hsl(0 0% 5%);
+}
+
+.opencut-editor button,
+.opencut-editor [role="button"] {
+  letter-spacing: 0;
+}
+
+.opencut-editor .transition-thumb {
+  background:
+    linear-gradient(135deg, rgba(216, 255, 79, 0.12), transparent 34%),
+    linear-gradient(160deg, #2a201f 0%, #6a392a 45%, #191919 100%);
+}
+
+.opencut-editor .transition-thumb-scene {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 70% 48%, #f0d6c4 0 9%, transparent 10%),
+    linear-gradient(135deg, #c78062 0 28%, #e7c2a4 29% 43%, #7e7f80 44% 100%);
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease,
+    filter 160ms ease;
+}
+
+.opencut-editor .transition-thumb .scene-b {
+  opacity: 0.72;
+  transform: translateX(48%);
+  background:
+    radial-gradient(circle at 72% 45%, #bbf7ff 0 6%, transparent 7%),
+    linear-gradient(160deg, #f0c6b5 0 25%, #4c5361 26% 58%, #101113 59% 100%);
+}
+
+.opencut-editor .transition-thumb-mark {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 46%,
+    rgba(216, 255, 79, 0.85) 47% 53%,
+    transparent 54%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.65;
+}
+
+.opencut-editor .transition-thumb-slide-left .scene-a,
+.opencut-editor .transition-thumb-push-left .scene-a {
+  transform: translateX(-24%);
+}
+
+.opencut-editor .transition-thumb-slide-right .scene-b {
+  transform: translateX(-30%);
+}
+
+.opencut-editor .transition-thumb-slide-up .scene-b,
+.opencut-editor .transition-thumb-push-down .scene-b {
+  transform: translateY(36%);
+}
+
+.opencut-editor .transition-thumb-slide-down .scene-b {
+  transform: translateY(-36%);
+}
+
+.opencut-editor .transition-thumb-fade .scene-b,
+.opencut-editor .transition-thumb-fade-both .scene-b,
+.opencut-editor .transition-thumb-fade-out .scene-b {
+  opacity: 0.38;
+}
+
+.opencut-editor .transition-thumb-flash-white .transition-thumb-mark {
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.98), transparent 62%);
+  opacity: 0.95;
+}
+
+.opencut-editor .transition-thumb-flash-black .transition-thumb-mark {
+  background: linear-gradient(
+    90deg,
+    transparent 0 45%,
+    rgba(0, 0, 0, 0.95) 46% 70%,
+    transparent 71%
+  );
+  opacity: 0.95;
+}
+
+.opencut-editor .transition-thumb-rotate .scene-b {
+  transform: rotate(-12deg) scale(1.15);
+}
+
+.opencut-editor .transition-thumb-flip .scene-b,
+.opencut-editor .transition-thumb-page .scene-b {
+  transform: perspective(220px) rotateY(-58deg);
+  transform-origin: left center;
+}
+
+.opencut-editor .transition-thumb-blur .scene-b,
+.opencut-editor .transition-thumb-ripple .scene-b {
+  filter: blur(3px);
+  opacity: 0.65;
+}
+
+.opencut-editor .transition-thumb-pixel .transition-thumb-mark {
+  background:
+    linear-gradient(90deg, transparent 0 42%, rgba(216, 255, 79, 0.7) 43% 55%, transparent 56%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.2) 0 4px, transparent 4px 10px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.28) 0 5px, transparent 5px 11px);
+}
+
+.opencut-editor .transition-thumb-wipe .transition-thumb-mark {
+  background: repeating-linear-gradient(90deg, rgba(216, 255, 79, 0.8) 0 5px, transparent 5px 12px);
+}
+
+.opencut-editor .transition-thumb-zoom-in .scene-b {
+  transform: scale(0.74);
+}
+
+.opencut-editor .transition-thumb-zoom-out .scene-b {
+  transform: scale(1.24);
 }
 
 @layer base {

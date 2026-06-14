@@ -1,496 +1,335 @@
-import { useState, useRef, useCallback, useEffect, useContext } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { PageResetContext } from "@/components/layout/PageResetContext";
+import { useCallback, useMemo, useState } from "react";
+import { Keyboard, Scissors, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useFFmpegWorker } from "@/hooks/useFFmpegWorker";
-import { useMultiPhaseProgress } from "@/hooks/useMultiPhaseProgress";
-import { ProcessingProgress } from "@/components/shared/ProcessingProgress";
-import { TimeRangeSlider } from "@/components/ffmpeg/TimeRangeSlider";
-import { getMediaType, formatDuration } from "@/lib/ffmpegFormats";
-import { formatBytes } from "@/types/progress";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Toaster as SonnerToaster, toast as sonnerToast } from "sonner";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/opencut-classic/components/ui/resizable";
+import { AssetsPanel } from "@/opencut-classic/components/editor/panels/assets";
+import { TabBar } from "@/opencut-classic/components/editor/panels/assets/tabbar";
+import { PropertiesPanel } from "@/opencut-classic/components/editor/panels/properties";
+import { ExportButton } from "@/opencut-classic/components/editor/export-button";
+import { Button } from "@/opencut-classic/components/ui/button";
 import {
-  ArrowLeft,
-  Upload,
-  Download,
-  Loader2,
-  Scissors,
-  RefreshCw,
-  Music,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/opencut-classic/components/ui/dropdown-menu";
+import { ShortcutsDialog } from "@/opencut-classic/actions/components/shortcuts-dialog";
+import { EditorProvider } from "@/opencut-classic/components/providers/editor-provider";
+import { MigrationDialog } from "@/opencut-classic/project/components/migration-dialog";
+import { usePanelStore } from "@/opencut-classic/editor/panel-store";
+import { useEditor } from "@/opencut-classic/editor/use-editor";
+import { usePasteMedia } from "@/opencut-classic/media/use-paste-media";
+import { PreviewPanel } from "@/opencut-classic/preview/components";
+import {
+  createPreviewOverlayControl,
+  isPreviewOverlayVisible,
+  mergePreviewOverlaySources,
+} from "@/opencut-classic/preview/overlays";
+import { usePreviewStore } from "@/opencut-classic/preview/preview-store";
+import { getGuidePreviewOverlaySource } from "@/opencut-classic/guides";
+import {
+  bookmarkNotesPreviewOverlay,
+  getBookmarkPreviewOverlaySource,
+} from "@/opencut-classic/timeline/bookmarks";
+import { Timeline } from "@/opencut-classic/timeline/components";
 
-// Phase configuration for media trimmer
-const PHASES = [
-  { id: "download", labelKey: "freeTools.ffmpeg.loading", weight: 0.1 },
-  { id: "process", labelKey: "freeTools.ffmpeg.trimming", weight: 0.9 },
-];
+const LOVARTS_OPENCUT_PROJECT_ID = "lovarts_opencut_project_id";
+const FALLBACK_PROJECT_ID = "lovarts-main";
 
 export function MediaTrimmerPage() {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { resetPage } = useContext(PageResetContext);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
-  const dragCounterRef = useRef(0);
-
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<"video" | "audio" | null>(null);
-  const [duration, setDuration] = useState<number>(0);
-  const [startTime, setStartTime] = useState<number>(0);
-  const [endTime, setEndTime] = useState<number>(0);
-  const [_currentTime, setCurrentTime] = useState<number>(0);
-  const [_isPlaying, setIsPlaying] = useState(false);
-  const [trimmedUrl, setTrimmedUrl] = useState<string | null>(null);
-  const [trimmedBlob, setTrimmedBlob] = useState<Blob | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showBackWarning, setShowBackWarning] = useState(false);
-
-  // Multi-phase progress tracking
-  const {
-    progress,
-    startPhase,
-    updatePhase,
-    reset: resetProgress,
-    resetAndStart,
-    complete: completeAllPhases,
-  } = useMultiPhaseProgress({ phases: PHASES });
-
-  const { trim, hasFailed, retryWorker } = useFFmpegWorker({
-    onPhase: (phase) => {
-      if (phase === "download") {
-        startPhase("download");
-      } else if (phase === "process") {
-        startPhase("process");
-      }
-    },
-    onProgress: (phase, progressValue, detail) => {
-      const phaseId = phase === "download" ? "download" : "process";
-      updatePhase(phaseId, progressValue, detail);
-    },
-    onError: (err) => {
-      console.error("Worker error:", err);
-      setError(err);
-      setIsProcessing(false);
-      resetProgress();
-    },
+  const [projectId, setProjectId] = useState(() => {
+    return (
+      localStorage.getItem(LOVARTS_OPENCUT_PROJECT_ID) || FALLBACK_PROJECT_ID
+    );
   });
 
-  const handleRetry = useCallback(() => {
-    setError(null);
-    retryWorker();
-  }, [retryWorker]);
+  const handleProjectIdChange = useCallback((nextProjectId: string) => {
+    localStorage.setItem(LOVARTS_OPENCUT_PROJECT_ID, nextProjectId);
+    setProjectId(nextProjectId);
+  }, []);
 
-  const handleBack = useCallback(() => {
-    if (isProcessing) {
-      setShowBackWarning(true);
-    } else {
-      resetPage(location.pathname);
-      navigate("/free-tools");
-    }
-  }, [isProcessing, resetPage, location.pathname, navigate]);
-
-  const handleConfirmBack = useCallback(() => {
-    setShowBackWarning(false);
-    resetPage(location.pathname);
-    navigate("/free-tools");
-  }, [resetPage, location.pathname, navigate]);
-
-  const handleFileSelect = useCallback(
-    (file: File) => {
-      const type = getMediaType(file);
-      if (type !== "video" && type !== "audio") return;
-
-      setError(null);
-      // Clean up previous URLs
-      if (mediaUrl) URL.revokeObjectURL(mediaUrl);
-      if (trimmedUrl) URL.revokeObjectURL(trimmedUrl);
-
-      const url = URL.createObjectURL(file);
-      setMediaFile(file);
-      setMediaUrl(url);
-      setMediaType(type);
-      setTrimmedUrl(null);
-      setTrimmedBlob(null);
-      setIsPlaying(false);
-      setStartTime(0);
-      setCurrentTime(0);
-      resetProgress();
-    },
-    [mediaUrl, trimmedUrl, resetProgress],
+  return (
+    <div className="opencut-editor h-full w-full overflow-hidden bg-background text-foreground">
+      <EditorProvider
+        projectId={projectId}
+        onProjectIdChange={handleProjectIdChange}
+      >
+        <div className="flex h-full w-full flex-col overflow-hidden bg-background">
+          <DegradedRendererBanner />
+          <LovartsOpenCutHeader onProjectIdChange={handleProjectIdChange} />
+          <div className="min-h-0 min-w-0 flex-1">
+            <OpenCutEditorLayout />
+          </div>
+          <MigrationDialog />
+          <SonnerToaster
+            theme="dark"
+            richColors
+            position="bottom-right"
+            toastOptions={{
+              classNames: {
+                toast: "border-border bg-card text-card-foreground",
+              },
+            }}
+          />
+        </div>
+      </EditorProvider>
+    </div>
   );
+}
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragCounterRef.current = 0;
-      setIsDragging(false);
-      if (isProcessing) return;
-      const file = e.dataTransfer.files[0];
-      if (file) handleFileSelect(file);
-    },
-    [handleFileSelect, isProcessing],
+function LovartsOpenCutHeader({
+  onProjectIdChange,
+}: {
+  onProjectIdChange: (projectId: string) => void;
+}) {
+  return (
+    <header className="lovarts-cut-header flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <ProjectMenu onProjectIdChange={onProjectIdChange} />
+        <TabBar className="min-w-0 flex-1" />
+      </div>
+      <nav className="flex shrink-0 items-center gap-2">
+        <ExportButton />
+      </nav>
+    </header>
   );
+}
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
+function ProjectMenu({
+  onProjectIdChange,
+}: {
+  onProjectIdChange: (projectId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [openDialog, setOpenDialog] = useState<"shortcuts" | null>(null);
+  const editor = useEditor();
+  const activeProject = useEditor((e) => e.project.getActiveOrNull());
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current++;
-    if (dragCounterRef.current === 1) {
-      setIsDragging(true);
-    }
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current--;
-    if (dragCounterRef.current === 0) {
-      setIsDragging(false);
-    }
-  }, []);
-
-  // Handle media loaded
-  const handleLoadedMetadata = useCallback(() => {
-    if (mediaRef.current) {
-      const dur = mediaRef.current.duration;
-      setDuration(dur);
-      setEndTime(dur);
-    }
-  }, []);
-
-  // Sync playback position
-  useEffect(() => {
-    const media = mediaRef.current;
-    if (!media) return;
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(media.currentTime);
-    };
-
-    media.addEventListener("timeupdate", handleTimeUpdate);
-    return () => media.removeEventListener("timeupdate", handleTimeUpdate);
-  }, []);
-
-  const handleTrim = async () => {
-    if (!mediaFile || !duration) return;
-
-    setIsProcessing(true);
-    setError(null);
-    setTrimmedUrl(null);
-    setTrimmedBlob(null);
-    resetAndStart("download");
-
-    // Determine output format from input
-    const ext =
-      mediaFile.name.split(".").pop()?.toLowerCase() ||
-      (mediaType === "video" ? "mp4" : "mp3");
-    const mimeType = mediaType === "video" ? "video/mp4" : "audio/mpeg";
-
+  const handleNewProject = async () => {
     try {
-      // Read file as ArrayBuffer
-      const arrayBuffer = await mediaFile.arrayBuffer();
-
-      // Trim using FFmpeg worker
-      const result = await trim(
-        arrayBuffer,
-        mediaFile.name,
-        startTime,
-        endTime,
-        ext,
-        ext,
+      await editor.project.prepareExit();
+      const projectId = await editor.project.createNewProject({
+        name: t("freeTools.mediaTrimmer.editor.defaultProjectName"),
+      });
+      onProjectIdChange(projectId);
+    } catch (error) {
+      sonnerToast.error(
+        t("freeTools.mediaTrimmer.editor.failedCreateProject"),
+        {
+          description:
+            error instanceof Error
+              ? error.message
+              : t("freeTools.mediaTrimmer.editor.tryAgain"),
+        },
       );
-
-      // Create blob and URL
-      const blob = new Blob([result.data], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-
-      setTrimmedBlob(blob);
-      setTrimmedUrl(url);
-      completeAllPhases();
-    } catch (err) {
-      console.error("Trimming failed:", err);
-      setError(err instanceof Error ? err.message : "Trimming failed");
-    } finally {
-      setIsProcessing(false);
     }
   };
 
-  const handleDownload = () => {
-    if (!trimmedUrl || !trimmedBlob || !mediaFile) return;
-
-    const ext = mediaFile.name.split(".").pop()?.toLowerCase() || "mp4";
-    const baseName = mediaFile.name.replace(/\.[^.]+$/, "");
-    const filename = `${baseName}_trimmed.${ext}`;
-
-    const link = document.createElement("a");
-    link.href = trimmedUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleSaveNow = async () => {
+    try {
+      await editor.project.saveCurrentProject();
+      sonnerToast.success(t("freeTools.mediaTrimmer.editor.projectSaved"));
+    } catch (error) {
+      sonnerToast.error(t("freeTools.mediaTrimmer.editor.failedSaveProject"), {
+        description:
+          error instanceof Error
+            ? error.message
+            : t("freeTools.mediaTrimmer.editor.tryAgain"),
+      });
+    }
   };
 
   return (
-    <div
-      className="p-8 relative"
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-    >
-      {/* Drag overlay */}
-      {isDragging && mediaFile && (
-        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center border-2 border-dashed border-primary rounded-lg m-4">
-          <div className="text-center">
-            <Upload className="h-12 w-12 text-primary mx-auto mb-2" />
-            <p className="text-lg font-medium">
-              {t("freeTools.mediaTrimmer.dropToReplace")}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both">
-        <Button variant="ghost" size="icon" onClick={handleBack}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">
-            {t("freeTools.mediaTrimmer.title")}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {t("freeTools.mediaTrimmer.description")}
-          </p>
-        </div>
-      </div>
-
-      {/* Upload area */}
-      {!mediaFile && (
-        <Card
-          className={cn(
-            "border-2 border-dashed cursor-pointer transition-colors animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both",
-            isDragging
-              ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50",
-          )}
-          style={{ animationDelay: "80ms" }}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="p-4 rounded-full bg-muted mb-4">
-              <Upload className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <p className="text-lg font-medium">
-              {t("freeTools.mediaTrimmer.selectMedia")}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {t("freeTools.mediaTrimmer.orDragDrop")}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              {t("freeTools.mediaTrimmer.supportedFormats")}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*,audio/*,.mp4,.webm,.mov,.avi,.mkv,.mp3,.m4a,.ogg,.wav,.flac"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFileSelect(file);
-          e.target.value = "";
-        }}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 rounded-[4px] p-1"
+            aria-label={t("freeTools.mediaTrimmer.editor.projectMenu")}
+          >
+            <Scissors className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="z-[100] w-44">
+          <DropdownMenuItem onClick={handleNewProject}>
+            {t("freeTools.mediaTrimmer.editor.newProject")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleSaveNow} disabled={!activeProject}>
+            {t("freeTools.mediaTrimmer.editor.saveProject")}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => setOpenDialog("shortcuts")}
+            icon={<Keyboard className="size-4" />}
+          >
+            {t("freeTools.mediaTrimmer.editor.shortcuts")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ShortcutsDialog
+        isOpen={openDialog === "shortcuts"}
+        onOpenChange={(isOpen) => setOpenDialog(isOpen ? "shortcuts" : null)}
       />
+    </>
+  );
+}
 
-      {/* Media preview and controls */}
-      {mediaFile && (
-        <div className="space-y-6">
-          {/* Controls */}
-          <div className="flex flex-wrap items-center gap-4">
-            <Button
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessing}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              {t("freeTools.mediaTrimmer.selectMedia")}
-            </Button>
+function DegradedRendererBanner() {
+  const { t } = useTranslation();
+  const isDegraded = useEditor((e) => e.renderer.isDegraded);
+  const [dismissed, setDismissed] = useState(false);
+  if (!isDegraded || dismissed) return null;
 
-            <Button
-              onClick={handleTrim}
-              disabled={isProcessing}
-              className="gradient-bg"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {t("freeTools.mediaTrimmer.trimming")}
-                </>
-              ) : (
-                <>
-                  <Scissors className="h-4 w-4 mr-2" />
-                  {t("freeTools.mediaTrimmer.trim")}
-                </>
-              )}
-            </Button>
-
-            {trimmedUrl && (
-              <Button variant="outline" onClick={handleDownload}>
-                <Download className="h-4 w-4 mr-2" />
-                {t("common.download")}
-              </Button>
-            )}
-          </div>
-
-          {/* Progress display */}
-          <ProcessingProgress
-            progress={progress}
-            showPhases={true}
-            showOverall={true}
-            showEta={true}
-          />
-
-          {/* Error with retry button */}
-          {error && hasFailed() && !isProcessing && (
-            <div className="flex items-center justify-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-              <span className="text-sm text-destructive">{error}</span>
-              <Button variant="outline" size="sm" onClick={handleRetry}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                {t("common.retry")}
-              </Button>
-            </div>
-          )}
-
-          {/* Media preview */}
-          <Card>
-            <CardContent className="p-6 space-y-6">
-              {/* Media element */}
-              {mediaType === "video" ? (
-                <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-                  <video
-                    ref={mediaRef as React.RefObject<HTMLVideoElement>}
-                    src={trimmedUrl || mediaUrl || undefined}
-                    className="w-full h-full object-contain"
-                    onLoadedMetadata={handleLoadedMetadata}
-                    controls
-                    playsInline
-                  />
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                    <Music className="h-8 w-8 text-primary/60" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">
-                        {mediaFile.name}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {formatBytes(mediaFile.size)}
-                      </div>
-                    </div>
-                  </div>
-                  <audio
-                    ref={mediaRef as React.RefObject<HTMLAudioElement>}
-                    src={trimmedUrl || mediaUrl || undefined}
-                    onLoadedMetadata={handleLoadedMetadata}
-                    className="w-full"
-                    controls
-                  />
-                </div>
-              )}
-
-              {/* Time range slider */}
-              {duration > 0 && (
-                <TimeRangeSlider
-                  duration={duration}
-                  startTime={startTime}
-                  endTime={endTime}
-                  onStartChange={setStartTime}
-                  onEndChange={setEndTime}
-                />
-              )}
-
-              {/* Info */}
-              <div className="flex flex-wrap gap-6 text-sm">
-                <div>
-                  <span className="text-muted-foreground">
-                    {t("freeTools.mediaTrimmer.originalDuration")}:{" "}
-                  </span>
-                  <span className="font-medium">
-                    {formatDuration(duration)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">
-                    {t("freeTools.mediaTrimmer.selectedDuration")}:{" "}
-                  </span>
-                  <span className="font-medium text-primary">
-                    {formatDuration(endTime - startTime)}
-                  </span>
-                </div>
-                {trimmedBlob && (
-                  <div>
-                    <span className="text-muted-foreground">
-                      {t("freeTools.mediaTrimmer.trimmedSize")}:{" "}
-                    </span>
-                    <span className="font-medium text-green-600 dark:text-green-400">
-                      {formatBytes(trimmedBlob.size)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Back Warning Dialog */}
-      <AlertDialog open={showBackWarning} onOpenChange={setShowBackWarning}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("freeTools.backWarning.title")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("freeTools.backWarning.description")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>
-              {t("freeTools.backWarning.cancel")}
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmBack}>
-              {t("freeTools.backWarning.confirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+  return (
+    <div className="flex h-9 shrink-0 items-center justify-center gap-2 border-b border-border bg-accent text-xs text-muted-foreground">
+      <span>{t("freeTools.mediaTrimmer.editor.gpuFallback")}</span>
+      <Button
+        variant="text"
+        size="icon"
+        className="h-6 w-6 p-0 [&_svg]:size-3.5"
+        onClick={() => setDismissed(true)}
+        aria-label={t("freeTools.mediaTrimmer.editor.dismiss")}
+      >
+        <X className="size-3.5" />
+      </Button>
     </div>
+  );
+}
+
+function OpenCutEditorLayout() {
+  usePasteMedia();
+  const { panels, setPanel } = usePanelStore();
+  const activeScene = useEditor((editor) =>
+    editor.scenes.getActiveSceneOrNull(),
+  );
+  const currentTime = useEditor((editor) => editor.playback.getCurrentTime());
+  const activeGuide = usePreviewStore((state) => state.activeGuide);
+  const overlays = usePreviewStore((state) => state.overlays);
+  const setOverlayVisibility = usePreviewStore(
+    (state) => state.setOverlayVisibility,
+  );
+  const showBookmarkNotes = isPreviewOverlayVisible({
+    overlay: bookmarkNotesPreviewOverlay,
+    overlays,
+  });
+
+  const overlaySource = useMemo(
+    () =>
+      mergePreviewOverlaySources({
+        sources: [
+          getGuidePreviewOverlaySource({
+            guideId: activeGuide,
+          }),
+          activeScene
+            ? getBookmarkPreviewOverlaySource({
+                bookmarks: activeScene.bookmarks,
+                time: currentTime,
+                isVisible: showBookmarkNotes,
+              })
+            : {
+                definitions: [bookmarkNotesPreviewOverlay],
+                instances: [],
+              },
+        ],
+      }),
+    [activeGuide, activeScene, currentTime, showBookmarkNotes],
+  );
+
+  const overlayControls = useMemo(
+    () =>
+      overlaySource.definitions.map((overlay) =>
+        createPreviewOverlayControl({ overlay, overlays }),
+      ),
+    [overlaySource.definitions, overlays],
+  );
+
+  return (
+    <ResizablePanelGroup
+      direction="vertical"
+      className="size-full gap-px bg-background"
+      onLayout={(sizes) => {
+        setPanel({
+          panel: "mainContent",
+          size: sizes[0] ?? panels.mainContent,
+        });
+        setPanel({
+          panel: "timeline",
+          size: sizes[1] ?? panels.timeline,
+        });
+      }}
+    >
+      <ResizablePanel
+        defaultSize={panels.mainContent}
+        minSize={30}
+        maxSize={85}
+        className="min-h-0"
+      >
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="size-full gap-px px-1.5 pt-1.5"
+          onLayout={(sizes) => {
+            setPanel({ panel: "tools", size: sizes[0] ?? panels.tools });
+            setPanel({ panel: "preview", size: sizes[1] ?? panels.preview });
+            setPanel({
+              panel: "properties",
+              size: sizes[2] ?? panels.properties,
+            });
+          }}
+        >
+          <ResizablePanel
+            defaultSize={panels.tools}
+            minSize={15}
+            maxSize={34}
+            className="min-w-0"
+          >
+            <AssetsPanel />
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          <ResizablePanel
+            defaultSize={panels.preview}
+            minSize={30}
+            className="min-h-0 min-w-0 flex-1"
+          >
+            <PreviewPanel
+              overlayControls={overlayControls}
+              overlayInstances={overlaySource.instances}
+              onOverlayVisibilityChange={setOverlayVisibility}
+            />
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          <ResizablePanel
+            defaultSize={panels.properties}
+            minSize={15}
+            maxSize={34}
+            className="min-w-0"
+          >
+            <PropertiesPanel />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </ResizablePanel>
+
+      <ResizableHandle withHandle />
+
+      <ResizablePanel
+        defaultSize={panels.timeline}
+        minSize={15}
+        maxSize={70}
+        className="min-h-0 px-1.5 pb-1.5"
+      >
+        <Timeline />
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

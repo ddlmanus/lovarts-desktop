@@ -1,6 +1,8 @@
 import { resolve } from "path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import wasm from "vite-plugin-wasm";
+import topLevelAwait from "vite-plugin-top-level-await";
 
 // Stub Capacitor modules for web/desktop build (they only run in Capacitor mobile)
 const CAPACITOR_MODULES = [
@@ -28,7 +30,7 @@ function stubCapacitorPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [stubCapacitorPlugin(), react()],
+  plugins: [stubCapacitorPlugin(), wasm(), topLevelAwait(), react()],
   server: {
     port: 8989,
     host: "0.0.0.0",
@@ -36,6 +38,13 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
+      "next/link": resolve(__dirname, "src/opencut-compat/next-link.tsx"),
+      "next/image": resolve(__dirname, "src/opencut-compat/next-image.tsx"),
+      "next/navigation": resolve(
+        __dirname,
+        "src/opencut-compat/next-navigation.ts",
+      ),
+      "next-themes": resolve(__dirname, "src/opencut-compat/next-themes.tsx"),
     },
   },
   worker: {
